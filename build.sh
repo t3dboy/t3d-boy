@@ -41,4 +41,8 @@ ln -s /Applications build/dmg/Applications
 hdiutil create -volname "T3d Boy ${VERSION}" -srcfolder build/dmg -ov -format UDZO "$DMG"
 # Stable unversioned copy for convenience / local references
 cp "$DMG" build/T3dBoy.dmg
+
+# Remove transient staging; keep the .app, DMGs, and cached AppIcon.png
+rm -rf build/dmg "$ICONSET"
+
 echo "Done: $(pwd)/$DMG"
