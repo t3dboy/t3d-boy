@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     enum Mode { case firstRun, scanOnly }
-    private enum Step { case welcome, folder, artPrompt, scanning, done }
+    private enum Step { case welcome, folder, artPrompt, scanning, achievements, done }
     private enum ScanScope { case top100, all }
 
     var onFoldersChanged: (() -> Void)?
@@ -27,6 +27,10 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
     private let secondaryButton = CapsuleButton(title: "", style: .neutral, fontSize: 12, height: 30)
     private let tertiaryButton = CapsuleButton(title: "", style: .neutral, fontSize: 11, height: 26)
     private var controlsCard = NSView()
+
+    // RetroAchievements sign-in (achievements step)
+    private let achievementsForm = RALoginForm()
+    private var achievementsCard = NSView()
 
     // Two-folder picker (folder step)
     private var folderPicker = NSView()
@@ -85,9 +89,11 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         controlsCard.isHidden = true
         folderPicker = makeFolderPicker()
         folderPicker.isHidden = true
+        achievementsCard = makeAchievementsCard()
+        achievementsCard.isHidden = true
 
         for v: NSView in [mascot, headline, body, progressBar, progressLabel,
-                          controlsCard, folderPicker,
+                          controlsCard, folderPicker, achievementsCard,
                           primaryButton, secondaryButton, tertiaryButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             content.addSubview(v)
@@ -118,6 +124,9 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
 
             folderPicker.topAnchor.constraint(equalTo: body.bottomAnchor, constant: 22),
             folderPicker.centerXAnchor.constraint(equalTo: content.centerXAnchor),
+
+            achievementsCard.topAnchor.constraint(equalTo: body.bottomAnchor, constant: 20),
+            achievementsCard.centerXAnchor.constraint(equalTo: content.centerXAnchor),
 
             primaryButton.bottomAnchor.constraint(equalTo: secondaryButton.topAnchor, constant: -10),
             primaryButton.centerXAnchor.constraint(equalTo: content.centerXAnchor),
@@ -276,6 +285,25 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         return card
     }
 
+    // MARK: - Achievements sign-in card (achievements step)
+
+    private func makeAchievementsCard() -> NSView {
+        let card = NSView()
+        achievementsForm.translatesAutoresizingMaskIntoConstraints = false
+        achievementsForm.onChange = { [weak self] in
+            // Once signed in, nudge the primary button to reflect that they're set.
+            self?.primaryButton.title = Achievements.shared.isLoggedIn ? "Continue" : "Skip for now"
+        }
+        card.addSubview(achievementsForm)
+        NSLayoutConstraint.activate([
+            card.widthAnchor.constraint(equalToConstant: 360),
+            achievementsForm.topAnchor.constraint(equalTo: card.topAnchor),
+            achievementsForm.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+            achievementsForm.bottomAnchor.constraint(equalTo: card.bottomAnchor),
+        ])
+        return card
+    }
+
     // MARK: - Estimates
 
     private static func estimateString(forGames count: Int) -> String {
@@ -319,6 +347,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         tertiaryButton.isHidden = true
         controlsCard.isHidden = true
         folderPicker.isHidden = true
+        achievementsCard.isHidden = true
 
         switch newStep {
         case .welcome:
@@ -376,6 +405,17 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             progressLabel.stringValue = "Starting…"
             primaryButton.title = "Cancel"
 
+        case .achievements:
+            headline.stringValue = "Track achievements? (optional)"
+            body.stringValue = """
+            T3d Boy supports RetroAchievements — sign in to unlock achievements, \
+            climb leaderboards, and master your favourites. You can also do this \
+            later from Preferences. Totally optional.
+            """
+            achievementsCard.isHidden = false
+            achievementsForm.refresh()
+            primaryButton.title = Achievements.shared.isLoggedIn ? "Continue" : "Skip for now"
+
         case .done:
             headline.stringValue = "You're all set!"
             body.stringValue = mode == .scanOnly
@@ -397,24 +437,30 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
             apply(.artPrompt)
         case .artPrompt:
             if primaryButton.title == "Continue" {
-                apply(.done)
+                apply(afterArtStep)
             } else {
                 startScan(scope: .top100)
             }
         case .scanning:
             ThumbnailStore.shared.cancelGeneration()
             primaryButton.isEnabled = false // completion handler closes the step
+        case .achievements:
+            apply(.done)
         case .done:
             close()
         }
     }
+
+    /// First-run onboarding offers achievements after box art; the scan-only re-run
+    /// (File ▸ Generate Missing Box Art) jumps straight to the recap.
+    private var afterArtStep: Step { mode == .scanOnly ? .done : .achievements }
 
     private func secondaryAction() {
         if step == .artPrompt { startScan(scope: .all) }
     }
 
     private func tertiaryAction() {
-        if step == .artPrompt { apply(.done) }
+        if step == .artPrompt { apply(afterArtStep) }
     }
 
     private func startScan(scope: ScanScope) {
@@ -438,7 +484,7 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         } completion: { [weak self] _ in
             guard let self else { return }
             self.primaryButton.isEnabled = true
-            self.apply(.done)
+            self.apply(self.afterArtStep)
         }
     }
 

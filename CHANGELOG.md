@@ -2,6 +2,41 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [1.2.0] — 2026-06-13
+
+### Added
+- **RetroAchievements** — optional sign-in to track unlocks, points, leaderboards,
+  rich presence, and mastery for Game Boy and Game Boy Color games, built on the
+  official rcheevos library. See [docs/retroachievements.md](docs/retroachievements.md).
+- **Achievements drawer** — a trophy-tabbed panel that slides out on the right of both
+  the ROM library and the game window. Browse a game's full achievement list (with
+  badges, descriptions, points, type chips, search, sorting, and Core/Unofficial
+  grouping) before you play, and watch unlocks and progress live while you do. Hidden
+  by default; pop it out with the handle, or set it to open automatically.
+- **Hardcore mode** — opt into RetroAchievements' stricter ruleset, which disables
+  save-state loads (and, in future, rewind/slow-motion/cheats). A "disable hardcore
+  for this session" escape lets you continue without losing your saved preference.
+- **In-game unlock toasts** with an optional chime, volume control, and configurable
+  screen corner.
+- **Preferences (⌘,) window** with a RetroAchievements section (account, hardcore,
+  drawer default, unlock sound, notification position, connection test) and an
+  Appearance section.
+- The library now **remembers your last-selected game** across window close/reopen
+  and app launches.
+
+### Changed
+- The app now **defaults to dark mode** (switchable to light in Preferences ▸
+  Appearance).
+- The dark-mode toggle moved from the library to **Preferences ▸ Appearance**, so the
+  artwork panel sits flush at the bottom.
+- The ambient-dimming effect "Hardcore Mode" was renamed **Hardcore Lighting** to
+  avoid confusion with RetroAchievements hardcore mode (⌃⌘H is unchanged).
+- Refreshed the app icon.
+
+### Security
+- Your RetroAchievements password is never stored — only the login token is kept, in
+  the macOS Keychain.
+
 ## [1.1.0] — 2026-06-13
 
 ### Added

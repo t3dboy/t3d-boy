@@ -10,8 +10,31 @@ DMG="build/T3dBoy-${VERSION}.dmg"
 rm -rf "$APP" build/dmg build/T3dBoy*.dmg
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# --- Vendored rcheevos (RetroAchievements C runtime) ---
+# Compiled once into a cached static lib (rebuild: rm build/librcheevos.a).
+RC=vendor/rcheevos
+RCLIB=build/librcheevos.a
+if [ ! -f "$RCLIB" ]; then
+    echo "== Compiling rcheevos =="
+    rm -rf build/rcobj && mkdir -p build/rcobj
+    RCCFLAGS="-O2 -DRC_DISABLE_LUA -DRC_CLIENT_SUPPORTS_HASH -I$RC/include -I$RC/src -I$RC/src/rcheevos -I$RC/src/rapi -I$RC/src/rhash"
+    RCOBJS=""
+    for c in $(find "$RC/src" -name '*.c' | grep -vE 'rc_libretro.c|rc_client_external.c'); do
+        o="build/rcobj/$(echo "$c" | tr '/' '_').o"
+        xcrun clang $RCCFLAGS -c "$c" -o "$o"
+        RCOBJS="$RCOBJS $o"
+    done
+    ar rcs "$RCLIB" $RCOBJS
+    rm -rf build/rcobj
+fi
+
 echo "== Compiling T3d Boy ${VERSION} =="
-xcrun swiftc -O -swift-version 5 -o "$APP/Contents/MacOS/T3d Boy" Sources/*.swift -framework Cocoa -framework AVFoundation -framework GameController
+xcrun swiftc -O -swift-version 5 -o "$APP/Contents/MacOS/T3d Boy" \
+    $(find Sources -name '*.swift') \
+    -framework Cocoa -framework AVFoundation -framework GameController \
+    -Xcc -fmodule-map-file="$RC/include/module.modulemap" -Xcc -I"$RC/include" \
+    -Xcc -DRC_DISABLE_LUA -Xcc -DRC_CLIENT_SUPPORTS_HASH \
+    "$RCLIB" -lz
 cp Info.plist "$APP/Contents/Info.plist"
 
 # Stamp the version into the bundle from VERSION
@@ -19,8 +42,15 @@ cp Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${VERSION}" "$APP/Contents/Info.plist"
 
 echo "== Icon =="
+# Source of truth is the committed tools/AppIcon.png. Keep an existing build/AppIcon.png
+# (so live edits aren't clobbered); on a clean build, restore from the committed source,
+# falling back to generating one only if neither exists.
 if [ ! -f build/AppIcon.png ]; then
-    xcrun swift tools/makeicon.swift build/AppIcon.png
+    if [ -f tools/AppIcon.png ]; then
+        cp tools/AppIcon.png build/AppIcon.png
+    else
+        xcrun swift tools/makeicon.swift build/AppIcon.png
+    fi
 fi
 ICONSET=build/AppIcon.iconset
 rm -rf "$ICONSET" && mkdir -p "$ICONSET"
@@ -33,6 +63,14 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 echo "== Signing (ad-hoc) =="
 codesign --force --sign - "$APP"
+
+# Re-register the freshly built bundle with LaunchServices so the Dock and Finder
+# pick up the current icon instead of a stale cached one. Rebuilding an unsigned
+# bundle in place repeatedly otherwise leaves macOS showing an old/generic icon.
+echo "== Refreshing icon registration =="
+touch "$APP"
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+[ -x "$LSREGISTER" ] && "$LSREGISTER" -f "$APP" >/dev/null 2>&1 || true
 
 echo "== DMG =="
 mkdir -p build/dmg

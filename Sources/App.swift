@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var library: LibraryWindowController?
     var gameWindows: [GameWindowController] = []
     var onboarding: OnboardingWindowController?
+    var achievementToasts: AchievementToastController?
+    var preferences: PreferencesWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ROMFolders.migrateIfNeeded()
@@ -18,6 +20,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         GamepadManager.shared.onStatusChange = { [weak self] in
             self?.gameWindows.forEach { $0.updateControllerStatus() }
         }
+
+        // RetroAchievements: optional, degrades gracefully if unavailable.
+        RASettings.registerDefaults()
+        Achievements.shared.start()
+        Achievements.shared.setHardcore(RASettings.hardcore) // apply stored preference
+        Achievements.shared.loginWithStoredToken { _ in } // silent; no-ops if no saved token
+
+        let toasts = AchievementToastController()
+        toasts.corner = RASettings.toastCorner
+        toasts.onActivate = { [weak self] id in
+            let target = self?.gameWindows.first { $0.window?.isKeyWindow == true }
+                ?? self?.gameWindows.last
+            target?.openDrawerAndFocus(id)
+        }
+        toasts.start()
+        achievementToasts = toasts
+        // Keep the toast corner in sync when the user changes it in Preferences.
+        NotificationCenter.default.addObserver(
+            forName: .raSettingsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.achievementToasts?.corner = RASettings.toastCorner }
 
         // Direct ROM path on the command line (testing) skips the library
         let args = CommandLine.arguments
@@ -45,10 +67,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if library == nil {
             let lib = LibraryWindowController()
             lib.onPlay = { [weak self] url in self?.play(url: url) }
-            lib.onToggleDark = { [weak self] dark in self?.setAppearance(dark: dark) }
             library = lib
         }
-        library?.setDarkSwitch(on: isDarkMode)
+        library?.refreshForAppearance()
         library?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
 
@@ -104,6 +125,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showLibrary()
     }
 
+    @objc func showPreferences(_ sender: Any?) {
+        if preferences == nil { preferences = PreferencesWindowController() }
+        preferences?.showWindow(nil)
+        preferences?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func play(url: URL) {
         do {
             let rom = try ROMLoader.load(url: url)
@@ -129,17 +157,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyStoredAppearance() {
+        // Dark by default (first run, no stored choice); the user can switch to light
+        // in Preferences ▸ Appearance, which persists.
         switch UserDefaults.standard.string(forKey: AppDelegate.appearanceKey) {
-        case "dark": NSApp.appearance = NSAppearance(named: .darkAqua)
         case "light": NSApp.appearance = NSAppearance(named: .aqua)
-        default: break // follow the system
+        default: NSApp.appearance = NSAppearance(named: .darkAqua)
         }
     }
 
     func setAppearance(dark: Bool) {
         NSApp.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         UserDefaults.standard.set(dark ? "dark" : "light", forKey: AppDelegate.appearanceKey)
-        library?.setDarkSwitch(on: dark)
+        library?.refreshForAppearance()
+        preferences?.refreshAppearanceControl()
     }
 
     @objc func toggleDarkMode(_ sender: Any?) {
@@ -156,6 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "About T3d Boy",
                         action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
                         keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Preferences…",
+                        action: #selector(showPreferences(_:)), keyEquivalent: ",")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit T3d Boy",
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -182,8 +215,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                          action: #selector(GameWindowController.togglePause(_:)),
                          keyEquivalent: "p")
         let hardcoreItem = NSMenuItem(
-            title: "Hardcore Mode",
-            action: #selector(GameWindowController.toggleHardcore(_:)), keyEquivalent: "h")
+            title: "Hardcore Lighting",
+            action: #selector(GameWindowController.toggleHardcoreLighting(_:)), keyEquivalent: "h")
         hardcoreItem.keyEquivalentModifierMask = [.command, .control]
         gameMenu.addItem(hardcoreItem)
         let wormItem = NSMenuItem(

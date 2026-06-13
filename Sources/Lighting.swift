@@ -1,5 +1,5 @@
 // T3d Boy — screen lighting effects that recreate the original Game Boy:
-//   • Hardcore Mode — the non-backlit DMG: dim the emulator in a dark room.
+//   • Hardcore Lighting — the non-backlit DMG: dim the emulator in a dark room.
 //   • Worm Light    — a warm '90s clip-on light shining down onto the screen,
 //                     the accessory people used to actually see the thing.
 // Both affect ONLY the emulator's own view (game window + library art preview),
@@ -11,7 +11,7 @@ extension Notification.Name {
     static let screenEffectsChanged = Notification.Name("T3dBoyScreenEffectsChanged")
 }
 
-enum Hardcore {
+enum HardcoreLighting {
     private static let key = "hardcoreMode"
 
     static var isEnabled: Bool {

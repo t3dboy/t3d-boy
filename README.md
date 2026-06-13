@@ -2,7 +2,7 @@
 
 A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swift.
 
-![T3d Boy](build/AppIcon.png)
+![T3d Boy](tools/AppIcon.png)
 
 ## Features
 
@@ -15,14 +15,18 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 - **Per-system ROM folders** — point each tab at its own folder
 - **Save states** (5 slots per game), **pause**, and a **fake boot screen** with
   T3d's chime
-- **Hardcore Mode** — recreates the non-backlit DMG by dimming the screen to match
+- **Hardcore Lighting** — recreates the non-backlit DMG by dimming the screen to match
   your room's ambient light (⌃⌘H)
 - **Worm Light** — a warm, aimable '90s-style clip-on light that reflects across the
   screen so you can see in the dark; drag it on the game preview display to angle it (⌃⌘L)
+- **RetroAchievements** — optional sign-in to track unlocks, points, leaderboards,
+  and mastery, with an achievements drawer you can pop out in the library or in-game,
+  plus an optional hardcore mode. See [docs/retroachievements.md](docs/retroachievements.md)
 - **Game controller support** (DualShock / DualSense / Xbox / Switch Pro over
   Bluetooth) via Apple's GameController framework
-- **Light / dark mode**, and a guided first-run onboarding hosted by **T3d**,
-  the pixel mascot
+- **Preferences (⌘,)** for RetroAchievements and appearance — **dark mode by
+  default**, switchable to light
+- A guided **first-run onboarding** hosted by **T3d**, the pixel mascot
 
 ## Controls
 
@@ -49,13 +53,15 @@ file (see [RELEASING.md](RELEASING.md)).
 
 ### Headless verification
 
-The binary has test modes used during development:
+The app binary has test modes used during development:
 
 ```sh
-build/t3dboy-test --test <rom> --frames 600 --out shot.png   # dump a screenshot
-build/t3dboy-test --art  <rom> art.png                       # preview library box art
-build/t3dboy-test --boot boot.png [cgb]                       # render the boot logo
-build/t3dboy-test --dingtest                                 # measure the boot chime pitch
+BIN="build/T3d Boy.app/Contents/MacOS/T3d Boy"
+"$BIN" --test <rom> --frames 600 --out shot.png   # dump a screenshot
+"$BIN" --art  <rom> art.png                        # preview library box art
+"$BIN" --boot boot.png [cgb]                        # render the boot logo
+"$BIN" --ratest                                     # RetroAchievements unit tests
+"$BIN" --dingtest                                   # measure the boot chime pitch
 ```
 
 ## Installing

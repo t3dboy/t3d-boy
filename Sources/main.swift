@@ -99,6 +99,8 @@ switch arguments.count >= 2 ? arguments[1] : "" {
 case "--test":
     runHeadless(arguments)
     exit(0)
+case "--ratest": // RetroAchievements unit tests (hashing, memory map, hardcore guard)
+    exit(RATests.runAll() ? 0 : 1)
 case "--art":
     runArtPreview(arguments)
     exit(0)

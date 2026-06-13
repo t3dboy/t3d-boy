@@ -85,10 +85,18 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     private var sessionStart: Date?
     private var framesSinceFlush = 0
     private var hardcoreFrameCounter = 0
+    private let rom: [UInt8]
+    // Achievements drawer (slides out to the right; widens the window)
+    private let drawer = AchievementsDrawer()
+    private let handle = DrawerHandle()
+    private var drawerOpen = false
+    private let screenWidth: CGFloat = 160 * 4
+    private let drawerWidth: CGFloat = 360
     var onClose: (() -> Void)?
 
     init(rom: [UInt8], title: String, url: URL) {
         gb = GameBoy(rom: rom)
+        self.rom = rom
         romURL = url
         baseTitle = "T3d Boy — \(title)"
         romHash = Insecure.MD5.hash(data: Data(rom))
@@ -98,14 +106,16 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         let rect = NSRect(x: 0, y: 0, width: 160 * scale, height: 144 * scale)
         emulatorView = EmulatorView(frame: rect)
 
+        let container = NSView(frame: rect)
         let window = NSWindow(
             contentRect: rect,
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered, defer: false)
         window.title = baseTitle
-        window.contentView = emulatorView
+        window.contentView = container
         super.init(window: window)
 
+        setUpContent(container)
         window.delegate = self
         window.center()
         emulatorView.joypad = gb.mmu.joypad
@@ -125,7 +135,68 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
         window?.makeFirstResponder(emulatorView)
+        // Hidden by default; only auto-open when the user opts in via Preferences.
+        if RASettings.showDrawerByDefault && !drawerOpen {
+            setDrawer(open: true, animated: false)
+        }
     }
+
+    // MARK: - Achievements drawer hosting
+
+    private func setUpContent(_ container: NSView) {
+        for v in [emulatorView, drawer, handle] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(v)
+        }
+        NSLayoutConstraint.activate([
+            // Emulator viewport — fixed 4× size, pinned left; pixel-perfect, untouched.
+            emulatorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            emulatorView.topAnchor.constraint(equalTo: container.topAnchor),
+            emulatorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            emulatorView.widthAnchor.constraint(equalToConstant: screenWidth),
+            // Drawer to the right of the viewport (off-screen until the window widens).
+            drawer.leadingAnchor.constraint(equalTo: emulatorView.trailingAnchor),
+            drawer.topAnchor.constraint(equalTo: container.topAnchor),
+            drawer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            drawer.widthAnchor.constraint(equalToConstant: drawerWidth),
+            // Chevron tab on the viewport's right edge.
+            handle.trailingAnchor.constraint(equalTo: emulatorView.trailingAnchor, constant: -2),
+            handle.centerYAnchor.constraint(equalTo: emulatorView.centerYAnchor),
+        ])
+        handle.onToggle = { [weak self] in self?.toggleDrawer() }
+    }
+
+    @objc func toggleDrawer() { setDrawer(open: !drawerOpen, animated: true) }
+
+    private func setDrawer(open: Bool, animated: Bool) {
+        guard let window else { return }
+        drawerOpen = open
+        handle.isExpanded = open
+
+        let contentW = screenWidth + (open ? drawerWidth : 0)
+        let targetFrame = window.frameRect(
+            forContentRect: NSRect(x: 0, y: 0, width: contentW, height: screenHeight))
+        var f = window.frame
+        f.size.width = targetFrame.size.width // grow rightward; top-left stays put
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                window.animator().setFrame(f, display: true)
+            }
+        } else {
+            window.setFrame(f, display: true)
+        }
+    }
+
+    /// Bring this window's drawer forward focused on an achievement (toast click-through).
+    func openDrawerAndFocus(_ id: UInt32) {
+        window?.makeKeyAndOrderFront(nil)
+        if !drawerOpen { setDrawer(open: true, animated: true) }
+        drawer.focus(onAchievement: id)
+    }
+
+    private var screenHeight: CGFloat { 144 * 4 }
 
     private func startTimer() {
         sessionStart = Date()
@@ -136,6 +207,12 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
                 self.emulatorView.present(self.gb.mmu.ppu.framebuffer)
             } else {
                 self.tickBoot()
+            }
+            // Tick the achievement runtime once per emulated frame (this window
+            // only if it owns RA). idle() during boot keeps server work flowing.
+            if Achievements.shared.isOwner(self) {
+                if self.bootDone { Achievements.shared.doFrame() }
+                else { Achievements.shared.idle() }
             }
             self.framesSinceFlush += 1
             if self.framesSinceFlush >= 1800 { // ~30s: persist play time
@@ -154,12 +231,12 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     // MARK: - Screen effects (Hardcore dim + Worm Light), emulator-only
 
     private func applyEffects() {
-        let dim = Hardcore.isEnabled ? Hardcore.currentDimOpacity() : 0
+        let dim = HardcoreLighting.isEnabled ? HardcoreLighting.currentDimOpacity() : 0
         emulatorView.applyEffects(dim: dim, worm: WormLight.isEnabled)
     }
 
-    @objc func toggleHardcore(_ sender: Any?) {
-        Hardcore.isEnabled.toggle() // notification re-applies to all windows
+    @objc func toggleHardcoreLighting(_ sender: Any?) {
+        HardcoreLighting.isEnabled.toggle() // notification re-applies to all windows
     }
 
     @objc func toggleWormLight(_ sender: Any?) {
@@ -217,13 +294,26 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         if GamepadManager.shared.joypad === gb.mmu.joypad {
             GamepadManager.shared.joypad = nil
         }
+        if Achievements.shared.isOwner(self) {
+            Achievements.shared.unloadGame()
+            RAMemory.mmu = nil
+            Achievements.shared.resignOwnership(self)
+        }
         onClose?()
     }
 
-    // The frontmost game window owns the controller
+    // The frontmost game window owns both the controller and the achievement runtime
     func windowDidBecomeKey(_ notification: Notification) {
         GamepadManager.shared.joypad = gb.mmu.joypad
         updateControllerStatus()
+        claimAchievements()
+    }
+
+    // Point the RA runtime at this window's game (reloads if it's a different game)
+    private func claimAchievements() {
+        guard Achievements.shared.claimOwnership(self) else { return }
+        RAMemory.mmu = gb.mmu
+        Achievements.shared.loadGame(rom: rom, cgb: gb.cgb)
     }
 
     func updateControllerStatus() {
@@ -273,7 +363,19 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     }
 
     @objc func loadState(_ sender: NSMenuItem) {
-        guard let data = try? Data(contentsOf: stateURL(slot: sender.tag)),
+        let slot = sender.tag
+        // Hardcore mode forbids loading save states. Offer the session escape hatch.
+        if Achievements.shared.hardcoreBlocks(.loadSaveState) {
+            promptHardcoreBlocked(action: "Loading a save state") { [weak self] in
+                self?.performLoadState(slot: slot)
+            }
+            return
+        }
+        performLoadState(slot: slot)
+    }
+
+    private func performLoadState(slot: Int) {
+        guard let data = try? Data(contentsOf: stateURL(slot: slot)),
               let snap = try? PropertyListDecoder().decode(Snapshot.self, from: data) else {
             NSSound.beep()
             return
@@ -283,6 +385,26 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         emulatorView.present(gb.mmu.ppu.framebuffer)
     }
 
+    /// Shared hardcore-block dialog: explains the restriction and lets the player
+    /// drop to softcore for this session so the action can proceed.
+    private func promptHardcoreBlocked(action: String, proceed: @escaping () -> Void) {
+        guard let window else { return }
+        let alert = NSAlert()
+        alert.messageText = "\(action) is disabled in hardcore mode"
+        alert.informativeText = """
+        RetroAchievements hardcore mode blocks save-state loads, rewind, slow-motion, \
+        and cheats. You can turn hardcore off for this session to continue — your saved \
+        preference is kept, and hardcore returns next time you launch T3d Boy.
+        """
+        alert.addButton(withTitle: "Disable Hardcore for This Session")
+        alert.addButton(withTitle: "Cancel")
+        alert.beginSheetModal(for: window) { response in
+            guard response == .alertFirstButtonReturn else { return }
+            Achievements.shared.disableHardcoreForSession()
+            proceed()
+        }
+    }
+
     // MARK: - Menu validation (slot timestamps, pause/resume title)
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -290,8 +412,8 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         case #selector(togglePause(_:)):
             menuItem.title = paused ? "Resume" : "Pause"
             return true
-        case #selector(toggleHardcore(_:)):
-            menuItem.state = Hardcore.isEnabled ? .on : .off
+        case #selector(toggleHardcoreLighting(_:)):
+            menuItem.state = HardcoreLighting.isEnabled ? .on : .off
             return true
         case #selector(toggleWormLight(_:)):
             menuItem.state = WormLight.isEnabled ? .on : .off

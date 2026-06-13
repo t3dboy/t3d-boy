@@ -248,7 +248,7 @@ enum Favourites {
 // Image view that scales pixel art without smoothing
 final class ArtView: NSView {
     // Same dim + worm-light overlays as the game window, so the box art is a
-    // live preview of what Hardcore Mode / Worm Light will look like — AND the
+    // live preview of what Hardcore Lighting / Worm Light will look like — AND the
     // place where the worm-light angle is adjusted (a draggable bulb handle),
     // so gameplay stays uncluttered. Dragging here updates the angle everywhere,
     // including any live game, via the .screenEffectsChanged notification.
@@ -425,12 +425,15 @@ final class ROMCellView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError() }
 }
 
-final class LibraryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate {
+final class LibraryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
     private var allRoms: [URL] = []
     private var gbRoms: [URL] = []
     private var gbcRoms: [URL] = []
     private var roms: [URL] = []
     private var nameCounts: [String: Int] = [:]
+    // Remembered across window close/reopen and app launches.
+    private var lastSelectedPath: String? = UserDefaults.standard.string(forKey: lastSelectedKey)
+    private static let lastSelectedKey = "library.lastSelectedROM"
     private let tabs = PillTabBar(titles: ["Game Boy", "Game Boy Color", "Favourites"])
     private let tableView = NSTableView()
     private let favButton = CapsuleButton(title: "☆ Favourite", style: .neutral)
@@ -446,15 +449,24 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         title: "Change", style: .neutral, fontSize: 11, height: 24)
     private let playButton = CapsuleButton(title: "▶  Play", style: .prominent)
     private let emptyLabel = NSTextField(labelWithString: "")
-    private let darkSwitch = NSSwitch()
     // "Lighting" housing under the artwork
     private let effectsHousing = NSView()
     private let hardcoreSwitch = NSSwitch()
     private let wormSwitch = NSSwitch()
     private var effectsTimer: Timer?
 
+    // Achievements drawer: tucked off the right edge, popped out via the handle to
+    // browse the selected game's achievements before playing.
+    private let achievementsDrawer = AchievementsDrawer()
+    private let drawerHandle = DrawerHandle()
+    private var drawerOpen = false
+    private let drawerWidth: CGFloat = 360
+    private var drawerWidthConstraint: NSLayoutConstraint!
+    private var previewTimer: Timer?
+    private var previewedURL: URL?
+    private var raIdleTimer: Timer?
+
     var onPlay: ((URL) -> Void)?
-    var onToggleDark: ((Bool) -> Void)?
 
     init() {
         let window = NSWindow(
@@ -464,6 +476,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         window.title = "T3d Boy — ROM Library"
         window.minSize = NSSize(width: 720, height: 540)
         super.init(window: window)
+        window.delegate = self
         buildUI()
         window.center()
         NotificationCenter.default.addObserver(
@@ -575,20 +588,20 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         divider.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(divider)
 
-        let darkLabel = NSTextField(labelWithString: "Dark Mode")
-        darkLabel.font = .systemFont(ofSize: 12)
-        darkLabel.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(darkLabel)
-
-        darkSwitch.target = self
-        darkSwitch.action = #selector(darkToggled)
-        darkSwitch.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(darkSwitch)
-
         buildEffectsHousing()
         content.addSubview(effectsHousing)
 
-        // Right-column layout guide spanning from the list to the window edge
+        // Achievements drawer + handle, pinned past the right edge of the detail pane.
+        // Collapsed (width 0) by default; popping it out widens the window rightward.
+        achievementsDrawer.translatesAutoresizingMaskIntoConstraints = false
+        achievementsDrawer.wantsLayer = true
+        achievementsDrawer.layer?.masksToBounds = true // clip cleanly when collapsed
+        drawerHandle.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(achievementsDrawer)
+        content.addSubview(drawerHandle)
+        drawerHandle.onToggle = { [weak self] in self?.toggleDrawer() }
+
+        // Right-column layout guide spanning from the list to the drawer's edge
         let rightArea = NSLayoutGuide()
         content.addLayoutGuide(rightArea)
 
@@ -615,7 +628,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             folderBar.leadingAnchor.constraint(equalTo: tabs.leadingAnchor),
             folderBar.widthAnchor.constraint(equalTo: tabs.widthAnchor),
             folderBar.heightAnchor.constraint(equalToConstant: 30),
-            folderBar.centerYAnchor.constraint(equalTo: darkSwitch.centerYAnchor),
+            folderBar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
 
             folderBarLabel.leadingAnchor.constraint(equalTo: folderBar.leadingAnchor, constant: 10),
             folderBarLabel.centerYAnchor.constraint(equalTo: folderBar.centerYAnchor),
@@ -629,12 +642,23 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             divider.bottomAnchor.constraint(equalTo: folderBar.topAnchor, constant: -8),
 
             rightArea.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            rightArea.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            rightArea.trailingAnchor.constraint(equalTo: achievementsDrawer.leadingAnchor),
 
-            // Lighting housing sits at the bottom of the detail column
+            // Drawer fills the space to the right of the detail pane; 0-wide when closed.
+            achievementsDrawer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            achievementsDrawer.topAnchor.constraint(equalTo: content.topAnchor),
+            achievementsDrawer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
+            // Chevron handle sits on the boundary between the detail pane and drawer.
+            drawerHandle.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -2),
+            drawerHandle.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            drawerHandle.widthAnchor.constraint(equalToConstant: 24),
+            drawerHandle.heightAnchor.constraint(equalToConstant: 70),
+
+            // Lighting housing sits flush at the bottom of the detail column
             effectsHousing.leadingAnchor.constraint(equalTo: rightArea.leadingAnchor, constant: 24),
             effectsHousing.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -24),
-            effectsHousing.bottomAnchor.constraint(equalTo: darkSwitch.topAnchor, constant: -16),
+            effectsHousing.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
 
             playButton.bottomAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: -16),
             playButton.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor, constant: -55),
@@ -660,12 +684,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
             emptyLabel.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor),
             emptyLabel.centerYAnchor.constraint(equalTo: content.centerYAnchor),
-
-            darkSwitch.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -16),
-            darkSwitch.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
-            darkLabel.trailingAnchor.constraint(equalTo: darkSwitch.leadingAnchor, constant: -8),
-            darkLabel.centerYAnchor.constraint(equalTo: darkSwitch.centerYAnchor),
         ])
+
+        // Toggled between 0 (closed) and drawerWidth (open); window width follows.
+        drawerWidthConstraint = achievementsDrawer.widthAnchor.constraint(equalToConstant: 0)
+        drawerWidthConstraint.isActive = true
+
         refreshFolderBarColor()
     }
 
@@ -698,7 +722,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             t.translatesAutoresizingMaskIntoConstraints = false
             return t
         }
-        let hcTitle = title("Hardcore Mode")
+        let hcTitle = title("Hardcore Lighting")
         let hcHint = hint("Automatically dim the T3d Boy display based on ambient lighting")
         let wlTitle = title("Worm Light")
         let wlHint = hint("Shine a warm ’90s clip-on light down over the screen")
@@ -747,19 +771,19 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     // Switch states + the art preview, kept in step with the global toggles
     private func syncEffectsUI() {
-        hardcoreSwitch.state = Hardcore.isEnabled ? .on : .off
+        hardcoreSwitch.state = HardcoreLighting.isEnabled ? .on : .off
         wormSwitch.state = WormLight.isEnabled ? .on : .off
         applyArtEffects()
     }
 
     // Live preview: dim the box art per ambient light, plus the worm-light glow
     private func applyArtEffects() {
-        let dim = Hardcore.isEnabled ? Hardcore.currentDimOpacity() : 0
+        let dim = HardcoreLighting.isEnabled ? HardcoreLighting.currentDimOpacity() : 0
         artView.applyEffects(dim: dim, worm: WormLight.isEnabled)
     }
 
     @objc private func hardcoreToggled() {
-        Hardcore.isEnabled = (hardcoreSwitch.state == .on) // posts .screenEffectsChanged
+        HardcoreLighting.isEnabled = (hardcoreSwitch.state == .on) // posts .screenEffectsChanged
     }
 
     @objc private func wormToggled() {
@@ -785,7 +809,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         for rom in allRoms {
             nameCounts[displayName(rom, stripTags: true).lowercased(), default: 0] += 1
         }
-        applyFilter(keepSelection: false)
+        applyFilter(keepSelection: false, restoreLast: true)
         ROMCatalog.shared.classify(allRoms) { [weak self] in
             self?.applyFilter(keepSelection: true)
         }
@@ -794,9 +818,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     // Filter into the active tab. Each non-Favourites tab draws from its own
     // system folder; when both tabs share one folder, the CGB header flag
     // splits them. Unclassified ROMs show until the background scan settles.
-    private func applyFilter(keepSelection: Bool) {
-        let selectedURL: URL? = keepSelection && tableView.selectedRow >= 0
-            && tableView.selectedRow < roms.count ? roms[tableView.selectedRow] : nil
+    private func applyFilter(keepSelection: Bool, restoreLast: Bool = false) {
+        // Prefer the live selection; otherwise fall back to the remembered ROM so a
+        // window reopen (or relaunch) lands back on the game you were looking at.
+        let liveSelection: String? = keepSelection && tableView.selectedRow >= 0
+            && tableView.selectedRow < roms.count ? roms[tableView.selectedRow].path : nil
+        let desiredPath = liveSelection ?? (restoreLast ? lastSelectedPath : nil)
 
         if tabs.selectedIndex == 2 {
             let favs = Favourites.all()
@@ -867,8 +894,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         if empty {
             titleLabel.stringValue = ""
             artView.image = nil
-        } else if let selectedURL, let idx = roms.firstIndex(of: selectedURL) {
+        } else if let desiredPath, let idx = roms.firstIndex(where: { $0.path == desiredPath }) {
             tableView.selectRowIndexes([idx], byExtendingSelection: false)
+            tableView.scrollRowToVisible(idx)
         } else {
             tableView.selectRowIndexes([0], byExtendingSelection: false)
             tableView.scrollRowToVisible(0)
@@ -902,8 +930,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         statsLabel.stringValue = parts.joined(separator: "   ·   ")
     }
 
-    func setDarkSwitch(on: Bool) {
-        darkSwitch.state = on ? .on : .off
+    /// Re-apply appearance-dependent colours after a dark/light switch (driven from
+    /// Preferences ▸ Appearance now that the library no longer hosts the toggle).
+    func refreshForAppearance() {
         refreshFolderBarColor()
     }
 
@@ -971,6 +1000,8 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return }
         let rom = roms[tableView.selectedRow]
+        lastSelectedPath = rom.path
+        UserDefaults.standard.set(rom.path, forKey: Self.lastSelectedKey)
         titleLabel.stringValue = displayName(rom, stripTags: true)
         updateFavButton(for: rom)
         updateStats(for: rom)
@@ -982,6 +1013,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
                   self.roms[self.tableView.selectedRow] == rom else { return }
             self.artView.image = image
         }
+        schedulePreview(immediate: false) // refresh the achievements drawer for the new pick
     }
 
     // MARK: - Actions
@@ -1037,7 +1069,119 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         }
     }
 
-    @objc private func darkToggled() {
-        onToggleDark?(darkSwitch.state == .on)
+    // MARK: - Achievements drawer
+
+    private func toggleDrawer() { setDrawer(open: !drawerOpen, animated: true) }
+
+    private func setDrawer(open: Bool, animated: Bool) {
+        guard open != drawerOpen, let window else { return }
+        drawerOpen = open
+        drawerHandle.isExpanded = open
+
+        var f = window.frame
+        f.size.width += open ? drawerWidth : -drawerWidth // grow/shrink rightward, top-left fixed
+        if open, let vis = window.screen?.visibleFrame, f.maxX > vis.maxX {
+            f.origin.x = max(vis.minX, vis.maxX - f.size.width) // slide left to stay on-screen
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.2
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                drawerWidthConstraint.animator().constant = open ? drawerWidth : 0
+                window.animator().setFrame(f, display: true)
+            }
+        } else {
+            drawerWidthConstraint.constant = open ? drawerWidth : 0
+            window.setFrame(f, display: true)
+        }
+
+        if open {
+            startIdlePump()
+            schedulePreview(immediate: true)
+        } else {
+            stopIdlePump()
+        }
+    }
+
+    /// rc_client drives its async loads (resolve hash → fetch game data → session)
+    /// through rc_client_idle(); the game window pumps it per frame, so while the
+    /// library owns the runtime we pump it here too, otherwise previews never finish.
+    private func startIdlePump() {
+        guard raIdleTimer == nil else { return }
+        let t = Timer(timeInterval: 0.1, repeats: true) { [weak self] _ in
+            guard let self, Achievements.shared.isOwner(self) else { return }
+            Achievements.shared.idle()
+        }
+        RunLoop.main.add(t, forMode: .common)
+        raIdleTimer = t
+    }
+
+    private func stopIdlePump() {
+        raIdleTimer?.invalidate()
+        raIdleTimer = nil
+    }
+
+    /// Debounce loading the selected game into the RA runtime for preview, so
+    /// arrowing quickly through the list doesn't fire a request per row.
+    private func schedulePreview(immediate: Bool) {
+        previewTimer?.invalidate()
+        guard drawerOpen else { return } // only do the work while the drawer is visible
+        previewTimer = Timer.scheduledTimer(
+            withTimeInterval: immediate ? 0 : 0.35, repeats: false
+        ) { [weak self] _ in self?.previewSelectedAchievements() }
+    }
+
+    private func previewSelectedAchievements() {
+        guard drawerOpen, Achievements.shared.isAvailable else { return }
+        // Never clobber an actively-playing game's session.
+        if let owner = Achievements.shared.owner, owner !== self { return }
+        guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return }
+        let url = roms[tableView.selectedRow]
+        if previewedURL == url, Achievements.shared.isOwner(self) { return } // already shown
+
+        Achievements.shared.claimOwnership(self)
+        RAMemory.mmu = nil // preview only — no live memory hook
+        previewedURL = url
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let rom = try? ROMLoader.load(url: url) else { return }
+            let cgb = rom.count > 0x143 && (rom[0x143] & 0x80) != 0
+            DispatchQueue.main.async {
+                guard let self, Achievements.shared.isOwner(self), self.previewedURL == url
+                else { return }
+                Achievements.shared.loadGame(rom: rom, cgb: cgb)
+            }
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        resumeDrawerIfNeeded()
+    }
+
+    override func showWindow(_ sender: Any?) {
+        super.showWindow(sender)
+        resumeDrawerIfNeeded() // reopening from the Dock tears down on close; rebuild
+    }
+
+    /// When the window is shown or refocused with the drawer open, restart the RA idle
+    /// pump and re-preview the selection — both are torn down in `windowWillClose`, so
+    /// without this the drawer comes back empty after a close + Dock reopen.
+    private func resumeDrawerIfNeeded() {
+        guard drawerOpen else { return }
+        startIdlePump()
+        schedulePreview(immediate: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        previewTimer?.invalidate()
+        stopIdlePump()
+        if Achievements.shared.isOwner(self) {
+            Achievements.shared.unloadGame()
+            RAMemory.mmu = nil
+            Achievements.shared.resignOwnership(self)
+            previewedURL = nil
+        }
     }
 }
