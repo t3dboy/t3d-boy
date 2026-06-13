@@ -29,7 +29,11 @@ final class PPU {
     // 0xAARRGGBB, classic DMG green shades, lightest to darkest
     static let palette: [UInt32] = [0xFF9BBC0F, 0xFF8BAC0F, 0xFF306230, 0xFF0F380F]
 
+    // Double-buffered: the PPU renders scanlines into `renderBuffer`; the completed
+    // frame is published to `framebuffer` at VBlank. The host only ever reads
+    // `framebuffer`, so it never sees a half-drawn frame (which showed as tearing).
     var framebuffer = [UInt32](repeating: PPU.palette[0], count: 160 * 144)
+    var renderBuffer = [UInt32](repeating: PPU.palette[0], count: 160 * 144)
     private var bgLine = [UInt8](repeating: 0, count: 160)   // BG color index per pixel
     private var bgPrio = [Bool](repeating: false, count: 160) // CGB BG attribute bit 7
 
@@ -114,6 +118,7 @@ final class PPU {
             if ly == 144 {
                 setMode(1)
                 requestInterrupt(0x01) // VBlank
+                framebuffer = renderBuffer // publish the just-completed frame
             }
         }
         if ly < 144 {
@@ -145,7 +150,7 @@ final class PPU {
             }
         } else {
             for x in 0 ..< 160 {
-                framebuffer[base + x] = PPU.palette[0]
+                renderBuffer[base + x] = PPU.palette[0]
                 bgLine[x] = 0
                 bgPrio[x] = false
             }
@@ -178,7 +183,7 @@ final class PPU {
             let colorIdx = hi << 1 | lo
             bgLine[x] = colorIdx
             bgPrio[x] = attr & 0x80 != 0
-            framebuffer[base + x] = cgbColor(bgPalRAM, palette: Int(attr & 7), index: Int(colorIdx))
+            renderBuffer[base + x] = cgbColor(bgPalRAM, palette: Int(attr & 7), index: Int(colorIdx))
         } else {
             let addr = tileDataAddress(tileNum) + py * 2
             let bit = 7 - px
@@ -187,7 +192,7 @@ final class PPU {
             let colorIdx = hi << 1 | lo
             bgLine[x] = colorIdx
             bgPrio[x] = false
-            framebuffer[base + x] = PPU.palette[Int((bgp >> (colorIdx * 2)) & 3)]
+            renderBuffer[base + x] = PPU.palette[Int((bgp >> (colorIdx * 2)) & 3)]
         }
     }
 
@@ -276,11 +281,11 @@ final class PPU {
                 }
 
                 if cgb {
-                    framebuffer[base + x] = cgbColor(
+                    renderBuffer[base + x] = cgbColor(
                         objPalRAM, palette: Int(attr & 7), index: Int(colorIdx))
                 } else {
                     let pal = attr & 0x10 != 0 ? obp1 : obp0
-                    framebuffer[base + x] = PPU.palette[Int((pal >> (colorIdx * 2)) & 3)]
+                    renderBuffer[base + x] = PPU.palette[Int((pal >> (colorIdx * 2)) & 3)]
                 }
             }
         }

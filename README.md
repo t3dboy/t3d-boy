@@ -25,7 +25,7 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 - **Game controller support** (DualShock / DualSense / Xbox / Switch Pro over
   Bluetooth) via Apple's GameController framework
 - **Preferences (⌘,)** for RetroAchievements and appearance — **dark mode by
-  default**, switchable to light
+  default** (switchable to light) and an optional **FPS counter**
 - A guided **first-run onboarding** hosted by **T3d**, the pixel mascot
 
 ## Controls

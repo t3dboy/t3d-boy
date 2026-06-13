@@ -92,6 +92,12 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     private var drawerOpen = false
     private let screenWidth: CGFloat = 160 * 4
     private let drawerWidth: CGFloat = 360
+    // Optional FPS counter (with a mini T3d) in the screen's top-right corner.
+    private let fpsOverlay = NSView()
+    private let fpsMascot = MascotView(frame: .zero)
+    private let fpsLabel = NSTextField(labelWithString: "–")
+    private var fpsFrames = 0
+    private var fpsClock = Date()
     var onClose: (() -> Void)?
 
     init(rom: [UInt8], title: String, url: URL) {
@@ -164,6 +170,44 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             handle.centerYAnchor.constraint(equalTo: emulatorView.centerYAnchor),
         ])
         handle.onToggle = { [weak self] in self?.toggleDrawer() }
+        setUpFPSOverlay(in: container)
+    }
+
+    // Small FPS readout pinned to the screen's top-right: a mini blinking T3d next
+    // to the frame rate, on a translucent pill so it stays legible over any game.
+    private func setUpFPSOverlay(in container: NSView) {
+        fpsOverlay.wantsLayer = true
+        fpsOverlay.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.45).cgColor
+        fpsOverlay.layer?.cornerRadius = 5
+        fpsOverlay.translatesAutoresizingMaskIntoConstraints = false
+        fpsMascot.translatesAutoresizingMaskIntoConstraints = false
+        fpsLabel.font = .monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
+        fpsLabel.textColor = .white
+        fpsLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        fpsOverlay.addSubview(fpsMascot)
+        fpsOverlay.addSubview(fpsLabel)
+        container.addSubview(fpsOverlay) // above the emulator view, top-right
+
+        NSLayoutConstraint.activate([
+            fpsOverlay.topAnchor.constraint(equalTo: emulatorView.topAnchor, constant: 6),
+            fpsOverlay.trailingAnchor.constraint(equalTo: emulatorView.trailingAnchor, constant: -6),
+            fpsOverlay.heightAnchor.constraint(equalTo: fpsMascot.heightAnchor, constant: 8),
+
+            fpsMascot.leadingAnchor.constraint(equalTo: fpsOverlay.leadingAnchor, constant: 4),
+            fpsMascot.centerYAnchor.constraint(equalTo: fpsOverlay.centerYAnchor),
+            fpsMascot.widthAnchor.constraint(equalToConstant: 16),
+            fpsMascot.heightAnchor.constraint(equalToConstant: 16),
+
+            fpsLabel.leadingAnchor.constraint(equalTo: fpsMascot.trailingAnchor, constant: 4),
+            fpsLabel.trailingAnchor.constraint(equalTo: fpsOverlay.trailingAnchor, constant: -5),
+            fpsLabel.centerYAnchor.constraint(equalTo: fpsOverlay.centerYAnchor),
+        ])
+
+        fpsOverlay.isHidden = !RASettings.showFPS
+        NotificationCenter.default.addObserver(
+            forName: .raSettingsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.fpsOverlay.isHidden = !RASettings.showFPS }
     }
 
     @objc func toggleDrawer() { setDrawer(open: !drawerOpen, animated: true) }
@@ -207,6 +251,16 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
                 self.emulatorView.present(self.gb.mmu.ppu.framebuffer)
             } else {
                 self.tickBoot()
+            }
+            // FPS readout: averaged over ~0.5s so the number doesn't flicker.
+            if self.bootDone, !self.fpsOverlay.isHidden {
+                self.fpsFrames += 1
+                let elapsed = Date().timeIntervalSince(self.fpsClock)
+                if elapsed >= 0.5 {
+                    self.fpsLabel.stringValue = String(Int((Double(self.fpsFrames) / elapsed).rounded()))
+                    self.fpsFrames = 0
+                    self.fpsClock = Date()
+                }
             }
             // Tick the achievement runtime once per emulated frame (this window
             // only if it owns RA). idle() during boot keeps server work flowing.

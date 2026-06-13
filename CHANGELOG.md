@@ -2,6 +2,17 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [1.2.1] — 2026-06-13
+
+### Fixed
+- **Screen tearing in Game Boy Color games.** The PPU now double-buffers — it renders
+  into a back buffer and publishes the completed frame at VBlank, so the display can
+  never show a half-drawn frame.
+
+### Added
+- **Optional FPS counter** — a small readout (with a mini T3d) in the game window's
+  top-right corner. Turn it on in Preferences ▸ Appearance ▸ Display.
+
 ## [1.2.0] — 2026-06-13
 
 ### Added

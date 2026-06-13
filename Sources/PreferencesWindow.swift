@@ -21,6 +21,8 @@ final class PreferencesWindowController: NSWindowController {
     private let testButton = NSButton(title: "Test Connection", target: nil, action: nil)
     private let testResult = NSTextField(labelWithString: "")
     private let darkModeCheck = NSButton(checkboxWithTitle: "Dark mode", target: nil, action: nil)
+    private let fpsCheck = NSButton(checkboxWithTitle:
+        "Show FPS counter in the game window", target: nil, action: nil)
 
     init() {
         let window = NSWindow(
@@ -72,7 +74,9 @@ final class PreferencesWindowController: NSWindowController {
         appearanceTitle.font = .systemFont(ofSize: 17, weight: .bold)
         darkModeCheck.target = self
         darkModeCheck.action = #selector(toggleDarkMode)
-        let appearance = section("Theme", views: [darkModeCheck])
+        fpsCheck.target = self
+        fpsCheck.action = #selector(toggleFPS)
+        let appearance = section("Display", views: [darkModeCheck, fpsCheck])
 
         let root = NSStackView(views: [title, account, options, appearanceTitle, appearance])
         root.orientation = .vertical
@@ -123,6 +127,7 @@ final class PreferencesWindowController: NSWindowController {
         volumeSlider.doubleValue = RASettings.unlockVolume
         volumeSlider.isEnabled = RASettings.unlockSound
         cornerPopup.selectItem(at: RASettings.toastCorner.rawValue)
+        fpsCheck.state = RASettings.showFPS ? .on : .off
         refreshAppearanceControl()
     }
 
@@ -146,6 +151,7 @@ final class PreferencesWindowController: NSWindowController {
     @objc private func toggleDarkMode() {
         (NSApp.delegate as? AppDelegate)?.setAppearance(dark: darkModeCheck.state == .on)
     }
+    @objc private func toggleFPS() { RASettings.showFPS = (fpsCheck.state == .on) }
 
     @objc private func testConnection() {
         testButton.isEnabled = false

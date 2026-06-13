@@ -20,6 +20,7 @@ enum RASettings {
         static let unlockSound    = "ra.unlockSound"
         static let unlockVolume   = "ra.unlockVolume"
         static let toastCorner    = "ra.toastCorner"
+        static let showFPS        = "ui.showFPS"
     }
 
     /// Register sensible defaults once at launch (so first reads aren't all "off").
@@ -57,6 +58,12 @@ enum RASettings {
     static var unlockVolume: Double {
         get { min(1, max(0, defaults.double(forKey: Key.unlockVolume))) }
         set { set(Key.unlockVolume, min(1, max(0, newValue))) }
+    }
+
+    /// Show a small FPS counter (with the T3d mascot) in the game window corner.
+    static var showFPS: Bool {
+        get { defaults.bool(forKey: Key.showFPS) }
+        set { set(Key.showFPS, newValue) }
     }
 
     /// Screen corner the unlock/leaderboard toasts appear in.

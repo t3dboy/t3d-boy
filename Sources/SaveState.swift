@@ -99,6 +99,7 @@ extension GameBoy {
         s.framebuffer.withUnsafeBytes { raw in
             p.framebuffer = Array(raw.bindMemory(to: UInt32.self))
         }
+        p.renderBuffer = p.framebuffer // seed the back buffer so a mid-frame load doesn't tear
 
         let t = mmu.timer
         t.div = s.div; t.tima = s.tima; t.tma = s.tma; t.tac = s.tac
