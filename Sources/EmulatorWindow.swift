@@ -8,6 +8,11 @@ import CryptoKit
 final class EmulatorView: NSView {
     var joypad: Joypad?
 
+    // Hardcore dim + Worm Light overlays — confined to THIS view (the Game Boy
+    // screen), never the rest of the display. The worm-light *angle* is adjusted
+    // on the library artwork, not here, so gameplay stays uncluttered.
+    private var effects: ScreenEffects!
+
     override var acceptsFirstResponder: Bool { true }
 
     override init(frame: NSRect) {
@@ -15,8 +20,19 @@ final class EmulatorView: NSView {
         wantsLayer = true
         layer?.magnificationFilter = .nearest
         layer?.backgroundColor = NSColor(srgbRed: 0.61, green: 0.74, blue: 0.06, alpha: 1).cgColor
+        effects = ScreenEffects(host: layer!)
+        effects.layout(bounds)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    override func layout() {
+        super.layout()
+        effects.layout(bounds)
+    }
+
+    func applyEffects(dim: Float, worm: Bool) {
+        effects.apply(dimOpacity: dim, wormOn: worm)
+    }
 
     func present(_ framebuffer: [UInt32]) {
         layer?.contents = makeImage(from: framebuffer)
@@ -68,6 +84,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     private var bootDone = false
     private var sessionStart: Date?
     private var framesSinceFlush = 0
+    private var hardcoreFrameCounter = 0
     var onClose: (() -> Void)?
 
     init(rom: [UInt8], title: String, url: URL) {
@@ -96,6 +113,12 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         PlayStats.shared.recordPlay(url)
         startTimer()
         startAudio()
+        applyEffects() // apply current dim/worm-light immediately on open
+
+        // Toggling either effect (from any window or the menu) updates this window
+        NotificationCenter.default.addObserver(
+            forName: .screenEffectsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.applyEffects() }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -118,9 +141,29 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             if self.framesSinceFlush >= 1800 { // ~30s: persist play time
                 self.flushPlaytime(stop: false)
             }
+            self.hardcoreFrameCounter += 1
+            if self.hardcoreFrameCounter >= 30 { // ~2 Hz: re-read ambient light
+                self.hardcoreFrameCounter = 0
+                self.applyEffects()
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         frameTimer = timer
+    }
+
+    // MARK: - Screen effects (Hardcore dim + Worm Light), emulator-only
+
+    private func applyEffects() {
+        let dim = Hardcore.isEnabled ? Hardcore.currentDimOpacity() : 0
+        emulatorView.applyEffects(dim: dim, worm: WormLight.isEnabled)
+    }
+
+    @objc func toggleHardcore(_ sender: Any?) {
+        Hardcore.isEnabled.toggle() // notification re-applies to all windows
+    }
+
+    @objc func toggleWormLight(_ sender: Any?) {
+        WormLight.isEnabled.toggle()
     }
 
     private func flushPlaytime(stop: Bool) {
@@ -246,6 +289,12 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         switch menuItem.action {
         case #selector(togglePause(_:)):
             menuItem.title = paused ? "Resume" : "Pause"
+            return true
+        case #selector(toggleHardcore(_:)):
+            menuItem.state = Hardcore.isEnabled ? .on : .off
+            return true
+        case #selector(toggleWormLight(_:)):
+            menuItem.state = WormLight.isEnabled ? .on : .off
             return true
         case #selector(saveState(_:)), #selector(loadState(_:)):
             let url = stateURL(slot: menuItem.tag)

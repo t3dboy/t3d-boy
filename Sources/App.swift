@@ -181,6 +181,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         gameMenu.addItem(withTitle: "Pause",
                          action: #selector(GameWindowController.togglePause(_:)),
                          keyEquivalent: "p")
+        let hardcoreItem = NSMenuItem(
+            title: "Hardcore Mode",
+            action: #selector(GameWindowController.toggleHardcore(_:)), keyEquivalent: "h")
+        hardcoreItem.keyEquivalentModifierMask = [.command, .control]
+        gameMenu.addItem(hardcoreItem)
+        let wormItem = NSMenuItem(
+            title: "Worm Light",
+            action: #selector(GameWindowController.toggleWormLight(_:)), keyEquivalent: "l")
+        wormItem.keyEquivalentModifierMask = [.command, .control]
+        gameMenu.addItem(wormItem)
         gameMenu.addItem(.separator())
         let saveItem = NSMenuItem(title: "Save State", action: nil, keyEquivalent: "")
         let saveSub = NSMenu(title: "Save State")

@@ -247,6 +247,19 @@ enum Favourites {
 
 // Image view that scales pixel art without smoothing
 final class ArtView: NSView {
+    // Same dim + worm-light overlays as the game window, so the box art is a
+    // live preview of what Hardcore Mode / Worm Light will look like — AND the
+    // place where the worm-light angle is adjusted (a draggable bulb handle),
+    // so gameplay stays uncluttered. Dragging here updates the angle everywhere,
+    // including any live game, via the .screenEffectsChanged notification.
+    private var effects: ScreenEffects!
+    private let goosenecLayer = CAShapeLayer()
+    private let bulbLayer = CALayer()
+    private var wormVisible = false
+    private var draggingLight = false
+    private var bulbPoint = CGPoint.zero
+    private let grabRadius: CGFloat = 30
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -257,11 +270,120 @@ final class ArtView: NSView {
         layer?.backgroundColor = NSColor.black.withAlphaComponent(0.15).cgColor
         layer?.borderWidth = 1
         layer?.borderColor = NSColor.separatorColor.cgColor
+        effects = ScreenEffects(host: layer!)
+        effects.layout(bounds)
+
+        goosenecLayer.fillColor = NSColor.clear.cgColor
+        goosenecLayer.strokeColor = NSColor(srgbRed: 1, green: 0.85, blue: 0.55, alpha: 0.45).cgColor
+        goosenecLayer.lineWidth = 2
+        goosenecLayer.lineCap = .round
+        goosenecLayer.isHidden = true
+        layer?.addSublayer(goosenecLayer)
+
+        bulbLayer.bounds = CGRect(x: 0, y: 0, width: 15, height: 15)
+        bulbLayer.cornerRadius = 7.5
+        bulbLayer.backgroundColor = NSColor(srgbRed: 1, green: 0.9, blue: 0.62, alpha: 0.72).cgColor
+        bulbLayer.borderColor = NSColor(srgbRed: 1, green: 0.97, blue: 0.86, alpha: 0.95).cgColor
+        bulbLayer.borderWidth = 1.5
+        bulbLayer.shadowColor = NSColor(srgbRed: 1, green: 0.82, blue: 0.45, alpha: 1).cgColor
+        bulbLayer.shadowRadius = 7
+        bulbLayer.shadowOpacity = 0.85
+        bulbLayer.shadowOffset = .zero
+        bulbLayer.isHidden = true
+        layer?.addSublayer(bulbLayer)
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    override func layout() {
+        super.layout()
+        effects.layout(bounds)
+        updateHandlePosition()
+    }
+
+    func applyEffects(dim: Float, worm: Bool) {
+        effects.apply(dimOpacity: dim, wormOn: worm)
+        setWormHandle(visible: worm)
+    }
+
     var image: CGImage? {
         didSet { layer?.contents = image }
+    }
+
+    // MARK: - Worm-light angle handle
+
+    private func setWormHandle(visible: Bool) {
+        wormVisible = visible
+        goosenecLayer.isHidden = !visible
+        bulbLayer.isHidden = !visible
+        if visible { updateHandlePosition() }
+    }
+
+    private func updateHandlePosition() {
+        let p = CGPoint(x: bounds.width * CGFloat(WormLight.sourceX),
+                        y: bounds.height * (1 - CGFloat(WormLight.sourceY)))
+        bulbPoint = p
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bulbLayer.position = p
+        let pivot = CGPoint(x: bounds.width * 0.5, y: bounds.height) // clips on at top-centre
+        let path = CGMutablePath()
+        path.move(to: pivot)
+        path.addLine(to: p)
+        goosenecLayer.path = path
+        CATransaction.commit()
+    }
+
+    private func setBulbActive(_ active: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        bulbLayer.transform = CATransform3DMakeScale(active ? 1.35 : 1, active ? 1.35 : 1, 1)
+        bulbLayer.opacity = active ? 1 : 0.85
+        CATransaction.commit()
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self))
+    }
+
+    private func nearHandle(_ event: NSEvent) -> Bool {
+        let p = convert(event.locationInWindow, from: nil)
+        return hypot(p.x - bulbPoint.x, p.y - bulbPoint.y) <= grabRadius
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard wormVisible, !draggingLight else { return }
+        (nearHandle(event) ? NSCursor.openHand : NSCursor.arrow).set()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if wormVisible, nearHandle(event) {
+            draggingLight = true
+            setBulbActive(true)
+            NSCursor.closedHand.set()
+        } else {
+            super.mouseDown(with: event)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard draggingLight else { super.mouseDragged(with: event); return }
+        let p = convert(event.locationInWindow, from: nil)
+        WormLight.setSource(x: Float(p.x / bounds.width),
+                            y: Float(1 - p.y / bounds.height)) // notifies → re-renders everywhere
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if draggingLight {
+            draggingLight = false
+            setBulbActive(false)
+            NSCursor.openHand.set()
+        } else {
+            super.mouseUp(with: event)
+        }
     }
 }
 
@@ -325,17 +447,22 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let playButton = CapsuleButton(title: "▶  Play", style: .prominent)
     private let emptyLabel = NSTextField(labelWithString: "")
     private let darkSwitch = NSSwitch()
+    // "Lighting" housing under the artwork
+    private let effectsHousing = NSView()
+    private let hardcoreSwitch = NSSwitch()
+    private let wormSwitch = NSSwitch()
+    private var effectsTimer: Timer?
 
     var onPlay: ((URL) -> Void)?
     var onToggleDark: ((Bool) -> Void)?
 
     init() {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 820, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "T3d Boy — ROM Library"
-        window.minSize = NSSize(width: 700, height: 440)
+        window.minSize = NSSize(width: 720, height: 540)
         super.init(window: window)
         buildUI()
         window.center()
@@ -345,6 +472,18 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             self?.refreshSelectedStats()
             self?.tableView.reloadData() // keep per-row stats current
         }
+        // Keep the housing switches + art preview in sync when toggled elsewhere
+        NotificationCenter.default.addObserver(
+            forName: .screenEffectsChanged, object: nil, queue: .main
+        ) { [weak self] _ in self?.syncEffectsUI() }
+
+        // Re-read ambient light a few times a second so the art preview dims
+        // live as the room (and the user's screen brightness) changes
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.applyArtEffects()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        effectsTimer = timer
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -446,6 +585,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         darkSwitch.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(darkSwitch)
 
+        buildEffectsHousing()
+        content.addSubview(effectsHousing)
+
         // Right-column layout guide spanning from the list to the window edge
         let rightArea = NSLayoutGuide()
         content.addLayoutGuide(rightArea)
@@ -489,7 +631,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             rightArea.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
             rightArea.trailingAnchor.constraint(equalTo: content.trailingAnchor),
 
-            playButton.bottomAnchor.constraint(equalTo: darkSwitch.topAnchor, constant: -14),
+            // Lighting housing sits at the bottom of the detail column
+            effectsHousing.leadingAnchor.constraint(equalTo: rightArea.leadingAnchor, constant: 24),
+            effectsHousing.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -24),
+            effectsHousing.bottomAnchor.constraint(equalTo: darkSwitch.topAnchor, constant: -16),
+
+            playButton.bottomAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: -16),
             playButton.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor, constant: -55),
             playButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 140),
 
@@ -525,9 +672,98 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private func refreshFolderBarColor() {
         (window?.contentView?.effectiveAppearance ?? NSApp.effectiveAppearance)
             .performAsCurrentDrawingAppearance {
-                folderBar.layer?.backgroundColor =
-                    NSColor.labelColor.withAlphaComponent(0.06).cgColor
+                let tint = NSColor.labelColor.withAlphaComponent(0.06).cgColor
+                folderBar.layer?.backgroundColor = tint
+                effectsHousing.layer?.backgroundColor = tint
             }
+    }
+
+    // MARK: - Lighting housing (Hardcore / Worm Light toggles + hints)
+
+    private func buildEffectsHousing() {
+        effectsHousing.wantsLayer = true
+        effectsHousing.layer?.cornerRadius = 10
+        effectsHousing.translatesAutoresizingMaskIntoConstraints = false
+
+        func title(_ s: String) -> NSTextField {
+            let t = NSTextField(labelWithString: s)
+            t.font = .systemFont(ofSize: 13, weight: .semibold)
+            t.translatesAutoresizingMaskIntoConstraints = false
+            return t
+        }
+        func hint(_ s: String) -> NSTextField {
+            let t = NSTextField(wrappingLabelWithString: s)
+            t.font = .systemFont(ofSize: 11)
+            t.textColor = .secondaryLabelColor
+            t.translatesAutoresizingMaskIntoConstraints = false
+            return t
+        }
+        let hcTitle = title("Hardcore Mode")
+        let hcHint = hint("Automatically dim the T3d Boy display based on ambient lighting")
+        let wlTitle = title("Worm Light")
+        let wlHint = hint("Shine a warm ’90s clip-on light down over the screen")
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+
+        for sw in [hardcoreSwitch, wormSwitch] {
+            sw.controlSize = .small
+            sw.target = self
+            sw.translatesAutoresizingMaskIntoConstraints = false
+        }
+        hardcoreSwitch.action = #selector(hardcoreToggled)
+        wormSwitch.action = #selector(wormToggled)
+
+        for v in [hcTitle, hcHint, wlTitle, wlHint, divider, hardcoreSwitch, wormSwitch] {
+            effectsHousing.addSubview(v)
+        }
+        let pad: CGFloat = 12
+        NSLayoutConstraint.activate([
+            hcTitle.topAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: 11),
+            hcTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            hardcoreSwitch.centerYAnchor.constraint(equalTo: hcTitle.centerYAnchor),
+            hardcoreSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            hcHint.topAnchor.constraint(equalTo: hcTitle.bottomAnchor, constant: 3),
+            hcHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            hcHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            divider.topAnchor.constraint(equalTo: hcHint.bottomAnchor, constant: 11),
+            divider.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            divider.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            wlTitle.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 11),
+            wlTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            wormSwitch.centerYAnchor.constraint(equalTo: wlTitle.centerYAnchor),
+            wormSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            wlHint.topAnchor.constraint(equalTo: wlTitle.bottomAnchor, constant: 3),
+            wlHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            wlHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+            wlHint.bottomAnchor.constraint(equalTo: effectsHousing.bottomAnchor, constant: -11),
+        ])
+        syncEffectsUI()
+    }
+
+    // Switch states + the art preview, kept in step with the global toggles
+    private func syncEffectsUI() {
+        hardcoreSwitch.state = Hardcore.isEnabled ? .on : .off
+        wormSwitch.state = WormLight.isEnabled ? .on : .off
+        applyArtEffects()
+    }
+
+    // Live preview: dim the box art per ambient light, plus the worm-light glow
+    private func applyArtEffects() {
+        let dim = Hardcore.isEnabled ? Hardcore.currentDimOpacity() : 0
+        artView.applyEffects(dim: dim, worm: WormLight.isEnabled)
+    }
+
+    @objc private func hardcoreToggled() {
+        Hardcore.isEnabled = (hardcoreSwitch.state == .on) // posts .screenEffectsChanged
+    }
+
+    @objc private func wormToggled() {
+        WormLight.isEnabled = (wormSwitch.state == .on)
     }
 
     // Loads both per-system folders from preferences and refreshes the view.

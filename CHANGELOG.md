@@ -2,6 +2,20 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [1.1.0] — 2026-06-13
+
+### Added
+- **Hardcore Mode** — recreates the original Game Boy's non-backlit screen: the
+  emulator dims based on ambient light (read from the display brightness sensor),
+  so a dark room makes the screen hard to see, just like the real DMG. Toggle in
+  the library's lighting panel or Game → Hardcore Mode (⌃⌘H).
+- **Worm Light** — a warm, angled '90s clip-on light rendered over the screen to
+  help you see in the dark, like the accessories of the era. Game → Worm Light (⌃⌘L).
+- Lighting panel under the box art with both toggles; the artwork previews the
+  effects live and reacts to your room's lighting.
+- Aim the Worm Light by dragging it on the game preview display — the warm pool
+  follows and stretches into a grazing-angle ellipse, and a running game updates live.
+
 ## [1.0.0] — 2026-06-12
 
 First release.

@@ -15,6 +15,10 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 - **Per-system ROM folders** — point each tab at its own folder
 - **Save states** (5 slots per game), **pause**, and a **fake boot screen** with
   T3d's chime
+- **Hardcore Mode** — recreates the non-backlit DMG by dimming the screen to match
+  your room's ambient light (⌃⌘H)
+- **Worm Light** — a warm, aimable '90s-style clip-on light that reflects across the
+  screen so you can see in the dark; drag it on the game preview display to angle it (⌃⌘L)
 - **Game controller support** (DualShock / DualSense / Xbox / Switch Pro over
   Bluetooth) via Apple's GameController framework
 - **Light / dark mode**, and a guided first-run onboarding hosted by **T3d**,
@@ -51,6 +55,7 @@ The binary has test modes used during development:
 build/t3dboy-test --test <rom> --frames 600 --out shot.png   # dump a screenshot
 build/t3dboy-test --art  <rom> art.png                       # preview library box art
 build/t3dboy-test --boot boot.png [cgb]                       # render the boot logo
+build/t3dboy-test --dingtest                                 # measure the boot chime pitch
 ```
 
 ## Installing
