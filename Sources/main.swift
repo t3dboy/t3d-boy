@@ -130,6 +130,18 @@ case "--dingtest": // verify the boot chime's frequency content
     let freq = Double(crossings) / 2.0 / 0.25
     print(String(format: "Note 2 measured: %.0f Hz (expected ~2080 Hz)", freq))
     exit(0)
+case "--demoshot": // --demoshot <out.png> : offscreen render of the demo library for the README
+    guard arguments.count >= 3 else {
+        FileHandle.standardError.write("Usage: --demoshot <out.png>\n".data(using: .utf8)!)
+        exit(2)
+    }
+    setenv("T3DBOY_DEMO", "1", 1)
+    let app = NSApplication.shared
+    app.setActivationPolicy(.accessory)
+    let lib = LibraryWindowController()
+    let ok = lib.renderDemoShot(to: URL(fileURLWithPath: arguments[2]))
+    print(ok ? "Wrote \(arguments[2])" : "Failed to render demo shot")
+    exit(ok ? 0 : 1)
 case "--boot": // --boot <out.png> [cgb] : render the settled boot logo frame
     let cgb = arguments.contains("cgb")
     let fb = BootScreen.frame(140, cgb: cgb)

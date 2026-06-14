@@ -978,6 +978,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     // Loads both per-system folders from preferences and refreshes the view.
     func reload() {
+        if DemoMode.isActive { // screenshot mode: made-up titles, no real ROMs
+            gbRoms = DemoMode.urls; gbcRoms = []; allRoms = DemoMode.urls
+            nameCounts = [:]
+            applyFilter(keepSelection: false, restoreLast: false)
+            return
+        }
         let gbFolder = ROMFolders.folder(.gb)
         let gbcFolder = ROMFolders.folder(.gbc)
         gbRoms = gbFolder.map { ROMLoader.romFiles(in: $0) } ?? []
@@ -999,6 +1005,42 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         ROMCatalog.shared.classify(allRoms) { [weak self] in
             self?.applyFilter(keepSelection: true)
         }
+    }
+
+    /// Offscreen render of the (demo) library window to a PNG, for the README
+    /// marketing shot. Renders the layer-backed content tree directly, so it needs
+    /// no screen-recording permission. Requires `DemoMode.isActive`.
+    @discardableResult
+    func renderDemoShot(to url: URL, scale: CGFloat = 2.0) -> Bool {
+        guard let window = window, let content = window.contentView else { return false }
+        // Clean art: no lighting effects on the box-art preview.
+        HardcoreLighting.isEnabled = false
+        WormLight.isEnabled = false
+        RoadTripLighting.isEnabled = false
+
+        window.setContentSize(NSSize(width: 880, height: 600))
+        reload()
+
+        // Force a full layout + display pass so every layer has committed contents
+        // (table rows, the boot-screen art, the themed toggles).
+        content.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        content.display()
+
+        let bounds = content.bounds
+        guard bounds.width > 0, bounds.height > 0,
+              let layer = content.layer,
+              let ctx = CGContext(
+                data: nil,
+                width: Int(bounds.width * scale), height: Int(bounds.height * scale),
+                bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return false }
+        ctx.scaleBy(x: scale, y: scale)
+        layer.render(in: ctx)
+        guard let image = ctx.makeImage() else { return false }
+        return writePNG(image, to: url)
     }
 
     // Filter into the active tab. Each non-Favourites tab draws from its own
@@ -1105,14 +1147,18 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     }
 
     private func updateStats(for rom: URL) {
-        let (seconds, plays) = PlayStats.shared.stats(for: rom)
+        let (seconds, plays, score): (Int, Int, Int?)
+        if let g = DemoMode.isActive ? DemoMode.game(for: rom) : nil {
+            (seconds, plays, score) = (g.seconds, g.plays, g.score)
+        } else {
+            let s = PlayStats.shared.stats(for: rom)
+            (seconds, plays, score) = (s.seconds, s.plays, Popularity.score(for: rom))
+        }
         var parts = [
             "⏱ \(PlayStats.format(seconds: seconds))",
             "▶ \(plays) \(plays == 1 ? "play" : "plays")",
         ]
-        if let score = Popularity.score(for: rom) {
-            parts.append("♥ \(score)/100")
-        }
+        if let score { parts.append("♥ \(score)/100") }
         statsLabel.stringValue = parts.joined(separator: "   ·   ")
     }
 
@@ -1124,6 +1170,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     // Reflects the active tab's folder, reading as part of that tab
     private func updateFolderBar() {
+        if DemoMode.isActive {
+            folderBarLabel.stringValue = "📁  ~/Games/Game Boy"
+            folderBarButton.isHidden = false
+            folderBarButton.title = "Change"
+            return
+        }
         if tabs.selectedIndex == 2 {
             folderBarLabel.stringValue = "★  Favourites from both libraries"
             folderBarButton.isHidden = true
@@ -1176,9 +1228,14 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         cell.nameLabel.stringValue = star + theme.cased(rowTitle(for: rom))
 
         var stats: [String] = []
-        let seconds = PlayStats.shared.seconds(for: rom)
-        if seconds > 0 { stats.append(PlayStats.format(seconds: seconds)) }
-        if let score = Popularity.score(for: rom) { stats.append("♥ \(score)") }
+        if let g = DemoMode.isActive ? DemoMode.game(for: rom) : nil {
+            if g.seconds > 0 { stats.append(PlayStats.format(seconds: g.seconds)) }
+            stats.append("♥ \(g.score)")
+        } else {
+            let seconds = PlayStats.shared.seconds(for: rom)
+            if seconds > 0 { stats.append(PlayStats.format(seconds: seconds)) }
+            if let score = Popularity.score(for: rom) { stats.append("♥ \(score)") }
+        }
         cell.statLabel.stringValue = stats.joined(separator: " · ")
         return cell
     }
@@ -1201,12 +1258,16 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         updateFavButton(for: rom)
         updateStats(for: rom)
         artView.image = nil
-        ThumbnailStore.shared.art(for: rom) { [weak self] image in
-            guard let self,
-                  self.tableView.selectedRow >= 0,
-                  self.tableView.selectedRow < self.roms.count,
-                  self.roms[self.tableView.selectedRow] == rom else { return }
-            self.artView.image = image
+        if DemoMode.isActive {
+            artView.image = DemoMode.art // the T3d Boy boot screen as box art
+        } else {
+            ThumbnailStore.shared.art(for: rom) { [weak self] image in
+                guard let self,
+                      self.tableView.selectedRow >= 0,
+                      self.tableView.selectedRow < self.roms.count,
+                      self.roms[self.tableView.selectedRow] == rom else { return }
+                self.artView.image = image
+            }
         }
         schedulePreview(immediate: false) // refresh the achievements drawer for the new pick
     }

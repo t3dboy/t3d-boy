@@ -2,7 +2,7 @@
 
 A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swift.
 
-![T3d Boy](tools/AppIcon.png)
+![The T3d Boy ROM library, Pistachio theme](tools/screenshot.png)
 
 ## Features
 

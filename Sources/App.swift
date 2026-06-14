@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         library?.showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        if ROMFolders.isConfigured {
+        if DemoMode.isActive || ROMFolders.isConfigured {
             library?.reload()
         } else {
             showOnboarding(mode: .firstRun) // first launch: T3d takes it from here
