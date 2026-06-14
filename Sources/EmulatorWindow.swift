@@ -101,7 +101,7 @@ final class EmulatorView: NSView {
 }
 
 final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuItemValidation {
-    private let gb: GameBoy
+    private var gb: GameBoy
     private let emulatorView: EmulatorView
     private var frameTimer: Timer?
     private var audioEngine: AVAudioEngine?
@@ -184,6 +184,34 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             self?.applyEffects()
             self?.controlBar.refreshStates()
         }
+
+        // RetroAchievements raises a reset when hardcore is enabled mid-session;
+        // compliance requires a full game reset, so power-cycle the core.
+        NotificationCenter.default.addObserver(
+            forName: .achievementEvent, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self,
+                  (note.userInfo?["type"] as? String) == "reset",
+                  Achievements.shared.isOwner(self) else { return }
+            self.resetEmulator()
+        }
+    }
+
+    /// Power-cycle the emulated console back to boot (recreates the core and re-wires
+    /// audio, input, and the RA memory hook). Used when RetroAchievements requires a
+    /// reset on switching into hardcore mid-session.
+    private func resetEmulator() {
+        let hadGamepad = GamepadManager.shared.joypad === gb.mmu.joypad
+        let ownsRA = Achievements.shared.isOwner(self)
+        audioEngine?.stop()
+        audioEngine = nil
+        gb = GameBoy(rom: rom)
+        emulatorView.joypad = gb.mmu.joypad
+        if hadGamepad { GamepadManager.shared.joypad = gb.mmu.joypad }
+        if ownsRA { RAMemory.mmu = gb.mmu }
+        bootFrame = 0
+        bootDone = false
+        startAudio()
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) { controlBar.setFullScreen(true) }

@@ -2,6 +2,20 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [1.3.1] — 2026-06-14
+
+### Changed
+- **Preferences redesigned** — the single scrolling panel is now a sidebar window,
+  grouped into Achievements (account, options, and notifications), Screen Effects,
+  and Appearance, so the growing list of settings is easier to navigate. The lighting
+  and display effects now sit together with a one‑line description under each.
+
+### Fixed
+- **RetroAchievements hardcore integrity** — switching a game from softcore to
+  hardcore mid‑session now resets the game, so a run can't be promoted to hardcore
+  after progress was already made with softcore conveniences. Every request to the
+  RetroAchievements server now also carries a proper, versioned client identifier.
+
 ## [1.3.0] — 2026-06-14
 
 ### Added

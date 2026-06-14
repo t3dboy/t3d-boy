@@ -15,6 +15,10 @@ enum RAServer {
     /// Set true to log requests/responses (tokens are redacted). Off by default.
     static var verboseLogging = false
 
+    /// RetroAchievements requires a unique, stable User-Agent on every request,
+    /// e.g. "T3dBoy/1.3.1 (macOS 15.5) rcheevos/11.x". Set once in Achievements.start().
+    static var userAgent = "T3dBoy"
+
     /// The rc_client server_call callback. Non-capturing → C function pointer.
     static let callback: rc_client_server_call_t = { request, callback, callbackData, _ in
         guard let request, let url = request.pointee.url,
@@ -26,6 +30,7 @@ enum RAServer {
 
         var req = URLRequest(url: nsURL)
         req.timeoutInterval = 30
+        req.setValue(RAServer.userAgent, forHTTPHeaderField: "User-Agent")
 
         if let post = request.pointee.post_data {
             let body = String(cString: post)

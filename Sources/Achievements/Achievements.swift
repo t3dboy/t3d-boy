@@ -81,6 +81,16 @@ final class Achievements {
 
     // MARK: - Lifecycle
 
+    /// "T3dBoy/<app version> (macOS <os>) <rcheevos clause>" — RA's required UA format.
+    private static func buildUserAgent(client: OpaquePointer) -> String {
+        var buf = [CChar](repeating: 0, count: 128)
+        let n = rc_client_get_user_agent_clause(client, &buf, buf.count)
+        let clause = n > 0 ? String(cString: buf) : "rcheevos"
+        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        return "T3dBoy/\(v) (macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)) \(clause)"
+    }
+
     /// Create the rc_client and its callbacks. Idempotent; safe to call repeatedly.
     func start() {
         guard client == nil else { return }
@@ -90,6 +100,7 @@ final class Achievements {
         }
         client = c
         isAvailable = true
+        RAServer.userAgent = Self.buildUserAgent(client: c)
 
         rc_client_set_hardcore_enabled(c, hardcoreRequested ? 1 : 0)
         rc_client_set_unofficial_enabled(c, unofficialEnabled ? 1 : 0)
@@ -179,6 +190,7 @@ final class Achievements {
         }
         var req = URLRequest(url: url)
         req.timeoutInterval = 30
+        req.setValue(RAServer.userAgent, forHTTPHeaderField: "User-Agent")
         if let post, !post.isEmpty {
             req.httpMethod = "POST"
             req.httpBody = post.data(using: .utf8)
@@ -270,6 +282,7 @@ final class Achievements {
         }
         var req = URLRequest(url: url)
         req.timeoutInterval = 15
+        req.setValue(RAServer.userAgent, forHTTPHeaderField: "User-Agent")
         if let post = apiReq.post_data.map({ String(cString: $0) }), !post.isEmpty {
             req.httpMethod = "POST"
             req.httpBody = post.data(using: .utf8)
