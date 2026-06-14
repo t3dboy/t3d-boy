@@ -66,12 +66,14 @@ final class PreferencesWindowController: NSWindowController {
     private let hcLightingToggle = SettingToggle()
     private let wormToggle = SettingToggle()
     private let lcdToggle = SettingToggle()
+    private let roadTripToggle = SettingToggle()
     // Appearance
     private var themeRadios: [NSButton] = []
     private let darkModeToggle = SettingToggle()
     private let fpsToggle = SettingToggle()
 
     private var darkModeRow: NSView?
+    private var wormRow: NSView?
     private let contentArea = NSView()
     private var sections: [(row: PrefRow, content: NSView)] = []
 
@@ -118,13 +120,26 @@ final class PreferencesWindowController: NSWindowController {
             labeledRow("Unlock volume", volumeSlider),
             labeledRow("Notification position", cornerPopup),
         ])
+        let wormRowView = toggleRow("Worm Light", wormToggle,
+                                    subtitle: "A warm '90s clip-on light shining down over the screen")
+        wormRow = wormRowView
+        // Hardcore Lighting needs an ambient-light reading; offer an info pill where the
+        // device can't provide one.
+        let hcSupported = HardcoreLighting.isSupported
+        if !hcSupported && HardcoreLighting.isEnabled { HardcoreLighting.isEnabled = false }
+        let hcRow = hcSupported
+            ? toggleRow("Hardcore Lighting", hcLightingToggle,
+                        subtitle: "Dim the screen to match your room's ambient light, like the non-backlit DMG")
+            : settingRow("Hardcore Lighting",
+                         subtitle: "Dim the screen to match your room's ambient light, like the non-backlit DMG",
+                         footer: ThemedUI.infoPill("Not compatible with this device"), dim: true)
         let screenC = sectionContent(title: "Screen Effects", items: [
-            toggleRow("Hardcore Lighting", hcLightingToggle,
-                      subtitle: "Dim the screen to match your room's ambient light, like the non-backlit DMG"),
-            toggleRow("Worm Light", wormToggle,
-                      subtitle: "A warm '90s clip-on light shining down over the screen"),
+            hcRow,
+            wormRowView,
             toggleRow("T3d LCD Real Feel™", lcdToggle,
                       subtitle: "Faithfully emulates an old LCD's pixel persistence"),
+            toggleRow("Road Trip Mode", roadTripToggle,
+                      subtitle: "Lighting from the back seat of your parents car at night as you pass street lights"),
         ])
         let darkRow = toggleRow("Dark mode", darkModeToggle,
                                 subtitle: theme.forcedAppearance != nil
@@ -224,6 +239,7 @@ final class PreferencesWindowController: NSWindowController {
         hcLightingToggle.onToggle = { HardcoreLighting.isEnabled = $0 }
         wormToggle.onToggle = { WormLight.isEnabled = $0 }
         lcdToggle.onToggle = { LCDGhosting.isEnabled = $0 }
+        roadTripToggle.onToggle = { RoadTripLighting.isEnabled = $0 }
         darkModeToggle.onToggle = { (NSApp.delegate as? AppDelegate)?.setAppearance(dark: $0) }
         fpsToggle.onToggle = { RASettings.showFPS = $0 }
     }
@@ -304,28 +320,43 @@ final class PreferencesWindowController: NSWindowController {
         return row
     }
 
-    // A settings row: title on the left, toggle pinned to the right, optional grey
-    // description beneath the title. Fixed width so toggles line up down a section.
     private func toggleRow(_ title: String, _ toggle: SettingToggle, subtitle: String? = nil) -> NSView {
+        toggle.setAccessibilityName(subtitle.map { "\(title). \($0)" } ?? title)
+        return settingRow(title, accessory: toggle, subtitle: subtitle)
+    }
+
+    // A settings row: title on the left, an optional trailing accessory (the toggle), an
+    // optional grey description beneath, and an optional `footer` (e.g. a "not compatible"
+    // pill) below that. Fixed width so trailing controls line up. `dim` greys the title.
+    private func settingRow(_ title: String, accessory: NSView? = nil, subtitle: String? = nil,
+                            footer: NSView? = nil, dim: Bool = false) -> NSView {
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        toggle.setAccessibilityName(subtitle.map { "\(title). \($0)" } ?? title)
         let label = NSTextField(labelWithString: theme.cased(title))
         label.font = theme.fontBody
-        label.textColor = theme.textSecondary
+        label.textColor = dim ? theme.textFaint : theme.textSecondary
         label.lineBreakMode = .byTruncatingTail
         label.translatesAutoresizingMaskIntoConstraints = false
-        toggle.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(label); container.addSubview(toggle)
+        container.addSubview(label)
 
         var cs = [
             container.widthAnchor.constraint(equalToConstant: 440),
             label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             label.topAnchor.constraint(equalTo: container.topAnchor),
-            toggle.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            toggle.centerYAnchor.constraint(equalTo: label.centerYAnchor),
-            toggle.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 12),
         ]
+        if let accessory {
+            accessory.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(accessory)
+            cs += [
+                accessory.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                accessory.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+                accessory.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 12),
+            ]
+        } else {
+            cs.append(label.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor))
+        }
+        // The bottom-most element drives the container height: footer ?? subtitle ?? title.
+        var bottom = label.bottomAnchor
         if let subtitle {
             let sub = ThemedUI.caption(subtitle)
             sub.translatesAutoresizingMaskIntoConstraints = false
@@ -334,12 +365,22 @@ final class PreferencesWindowController: NSWindowController {
             cs += [
                 sub.leadingAnchor.constraint(equalTo: container.leadingAnchor),
                 sub.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 3),
-                sub.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -12),
-                sub.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+                sub.trailingAnchor.constraint(lessThanOrEqualTo: (accessory?.leadingAnchor ?? container.trailingAnchor),
+                                              constant: accessory == nil ? 0 : -12),
             ]
-        } else {
-            cs.append(label.bottomAnchor.constraint(equalTo: container.bottomAnchor))
+            bottom = sub.bottomAnchor
         }
+        if let footer {
+            footer.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(footer)
+            cs += [
+                footer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                footer.topAnchor.constraint(equalTo: bottom, constant: 6),
+                footer.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+            ]
+            bottom = footer.bottomAnchor
+        }
+        cs.append(bottom.constraint(equalTo: container.bottomAnchor))
         NSLayoutConstraint.activate(cs)
         return container
     }
@@ -366,6 +407,11 @@ final class PreferencesWindowController: NSWindowController {
         hcLightingToggle.isOn = HardcoreLighting.isEnabled
         wormToggle.isOn = WormLight.isEnabled
         lcdToggle.isOn = LCDGhosting.isEnabled
+        roadTripToggle.isOn = RoadTripLighting.isEnabled
+        // Road Trip Mode forces the worm light on and locks it.
+        let wormLocked = RoadTripLighting.isEnabled
+        wormToggle.isEnabled = !wormLocked
+        wormRow?.alphaValue = wormLocked ? 0.4 : 1
     }
 
     /// Keep the dark-mode toggle in step with the app's current appearance. Skinned

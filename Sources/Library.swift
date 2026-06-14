@@ -507,6 +507,8 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let hardcoreSwitch = SettingToggle()
     private let wormSwitch = SettingToggle()
     private let lcdSwitch = SettingToggle()
+    private let roadTripSwitch = SettingToggle()
+    private var wormRow: NSView?
     private var effectsTimer: Timer?
 
     // Achievements drawer: tucked off the right edge, popped out via the handle to
@@ -857,83 +859,102 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         effectsHousing.layer?.cornerRadius = 10
         effectsHousing.translatesAutoresizingMaskIntoConstraints = false
 
-        func title(_ s: String) -> NSTextField {
-            let t = NSTextField(labelWithString: theme.cased(s))
-            t.font = theme.skinned ? .rounded(13, .regular) : .systemFont(ofSize: 13, weight: .semibold)
-            t.textColor = theme.textSecondary
-            t.translatesAutoresizingMaskIntoConstraints = false
-            return t
-        }
-        func hint(_ s: String) -> NSTextField {
-            let t = NSTextField(wrappingLabelWithString: theme.cased(s))
-            t.font = theme.fontCaption
-            t.textColor = theme.textFaint
-            t.translatesAutoresizingMaskIntoConstraints = false
-            return t
-        }
-        let hcTitle = title("Hardcore Lighting")
-        let hcHint = hint("Automatically dim the T3d Boy display based on ambient lighting")
-        let wlTitle = title("Worm Light")
-        let wlHint = hint("Shine a warm ’90s clip-on light down over the screen")
-        let lcdTitle = title("T3d LCD Real Feel™")
-        let lcdHint = hint("Faithfully emulates an old LCD's pixel persistence")
-        let divider = NSBox()
-        divider.boxType = .separator
-        divider.translatesAutoresizingMaskIntoConstraints = false
-        let divider2 = NSBox()
-        divider2.boxType = .separator
-        divider2.translatesAutoresizingMaskIntoConstraints = false
-
         hardcoreSwitch.onToggle = { HardcoreLighting.isEnabled = $0 } // posts .screenEffectsChanged
         wormSwitch.onToggle = { WormLight.isEnabled = $0 }
         lcdSwitch.onToggle = { LCDGhosting.isEnabled = $0 }
+        roadTripSwitch.onToggle = { RoadTripLighting.isEnabled = $0 }
         hardcoreSwitch.setAccessibilityName("Hardcore Lighting. Automatically dim the display to ambient light")
         wormSwitch.setAccessibilityName("Worm Light. A warm clip-on light over the screen")
         lcdSwitch.setAccessibilityName("T3d LCD Real Feel. Emulates an old LCD's pixel persistence")
+        roadTripSwitch.setAccessibilityName("Road Trip Mode. Lighting from the back seat of your parents car at night as you pass street lights")
 
-        for v in [hcTitle, hcHint, wlTitle, wlHint, lcdTitle, lcdHint,
-                  divider, divider2, hardcoreSwitch, wormSwitch, lcdSwitch] {
-            effectsHousing.addSubview(v)
+        // Laid out 2 × 2 now that there are four effects.
+        let wormRowView = effectRow("Worm Light", "Shine a warm ’90s clip-on light down over the screen", wormSwitch)
+        wormRow = wormRowView
+        // Hardcore Lighting needs an ambient-light reading; on devices without it, offer
+        // an info pill instead of the toggle and make sure it isn't left switched on.
+        let hcSupported = HardcoreLighting.isSupported
+        if !hcSupported && HardcoreLighting.isEnabled { HardcoreLighting.isEnabled = false }
+        let hcRow = effectRow("Hardcore Lighting",
+                              "Automatically dim the T3d Boy display based on ambient lighting",
+                              hcSupported ? hardcoreSwitch : nil,
+                              footer: hcSupported ? nil : ThemedUI.infoPill("Not compatible with this device"),
+                              dim: !hcSupported)
+        let topRow = NSStackView(views: [hcRow, wormRowView])
+        let bottomRow = NSStackView(views: [
+            effectRow("T3d LCD Real Feel™", "Faithfully emulates an old LCD's pixel persistence", lcdSwitch),
+            effectRow("Road Trip Mode",
+                      "Lighting from the back seat of your parents car at night as you pass street lights",
+                      roadTripSwitch),
+        ])
+        for row in [topRow, bottomRow] {
+            row.orientation = .horizontal
+            row.distribution = .fillEqually
+            row.spacing = 18
         }
+        let grid = NSStackView(views: [topRow, bottomRow])
+        grid.orientation = .vertical
+        grid.alignment = .leading
+        grid.spacing = 14
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        effectsHousing.addSubview(grid)
         let pad: CGFloat = 12
         NSLayoutConstraint.activate([
-            hcTitle.topAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: 11),
-            hcTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            hardcoreSwitch.centerYAnchor.constraint(equalTo: hcTitle.centerYAnchor),
-            hardcoreSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            hcHint.topAnchor.constraint(equalTo: hcTitle.bottomAnchor, constant: 3),
-            hcHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            hcHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            divider.topAnchor.constraint(equalTo: hcHint.bottomAnchor, constant: 11),
-            divider.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            divider.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            wlTitle.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 11),
-            wlTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            wormSwitch.centerYAnchor.constraint(equalTo: wlTitle.centerYAnchor),
-            wormSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            wlHint.topAnchor.constraint(equalTo: wlTitle.bottomAnchor, constant: 3),
-            wlHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            wlHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            divider2.topAnchor.constraint(equalTo: wlHint.bottomAnchor, constant: 11),
-            divider2.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            divider2.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            lcdTitle.topAnchor.constraint(equalTo: divider2.bottomAnchor, constant: 11),
-            lcdTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            lcdSwitch.centerYAnchor.constraint(equalTo: lcdTitle.centerYAnchor),
-            lcdSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-
-            lcdHint.topAnchor.constraint(equalTo: lcdTitle.bottomAnchor, constant: 3),
-            lcdHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
-            lcdHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-            lcdHint.bottomAnchor.constraint(equalTo: effectsHousing.bottomAnchor, constant: -11),
+            grid.topAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: 11),
+            grid.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            grid.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+            grid.bottomAnchor.constraint(equalTo: effectsHousing.bottomAnchor, constant: -11),
         ])
+        topRow.widthAnchor.constraint(equalTo: grid.widthAnchor).isActive = true
+        bottomRow.widthAnchor.constraint(equalTo: grid.widthAnchor).isActive = true
         syncEffectsUI()
+    }
+
+    /// One effect row: title + an optional trailing accessory (the toggle), a greyed
+    /// hint underneath, and an optional `footer` (e.g. a "not compatible" pill) below the
+    /// hint. `dim` greys the title for unavailable options.
+    private func effectRow(_ titleText: String, _ hintText: String, _ accessory: NSView? = nil,
+                           footer: NSView? = nil, dim: Bool = false) -> NSView {
+        let title = NSTextField(labelWithString: theme.cased(titleText))
+        title.font = theme.skinned ? .rounded(13, .regular) : .systemFont(ofSize: 13, weight: .semibold)
+        title.textColor = dim ? theme.textFaint : theme.textSecondary
+        let hint = NSTextField(wrappingLabelWithString: theme.cased(hintText))
+        hint.font = theme.fontCaption
+        hint.textColor = theme.textFaint
+        hint.preferredMaxLayoutWidth = 180 // half-width grid cell
+        let container = NSView()
+        for v in [title, hint, accessory, footer].compactMap({ $0 }) {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(v)
+        }
+        var cs = [
+            title.topAnchor.constraint(equalTo: container.topAnchor),
+            title.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hint.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 3),
+            hint.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            hint.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+        ]
+        if let accessory {
+            cs += [
+                accessory.centerYAnchor.constraint(equalTo: title.centerYAnchor),
+                accessory.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                accessory.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 8),
+            ]
+        } else {
+            cs.append(title.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor))
+        }
+        if let footer {
+            cs += [
+                footer.topAnchor.constraint(equalTo: hint.bottomAnchor, constant: 6),
+                footer.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                footer.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+                footer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ]
+        } else {
+            cs.append(hint.bottomAnchor.constraint(equalTo: container.bottomAnchor))
+        }
+        NSLayoutConstraint.activate(cs)
+        return container
     }
 
     // Switch states + the art preview, kept in step with the global toggles
@@ -941,6 +962,11 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         hardcoreSwitch.isOn = HardcoreLighting.isEnabled
         wormSwitch.isOn = WormLight.isEnabled
         lcdSwitch.isOn = LCDGhosting.isEnabled
+        roadTripSwitch.isOn = RoadTripLighting.isEnabled
+        // Road Trip Mode forces the worm light on and locks it.
+        let wormLocked = RoadTripLighting.isEnabled
+        wormSwitch.isEnabled = !wormLocked
+        wormRow?.alphaValue = wormLocked ? 0.4 : 1
         applyArtEffects()
     }
 

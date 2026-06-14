@@ -40,16 +40,30 @@ class FocusableControl: NSView {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
 
+    /// Only show the focus ring when focus arrived via the keyboard (Tab/arrows) — not
+    /// when the user simply clicked the control with the mouse, which would otherwise
+    /// leave a stray ring behind.
+    private var showsFocusRing = false
+
     /// Corner radius for the focus ring shape — match the control's own rounding.
     var focusRingCornerRadius: CGFloat { layer?.cornerRadius ?? 6 }
 
-    override var focusRingMaskBounds: NSRect { bounds }
+    override var focusRingMaskBounds: NSRect { showsFocusRing ? bounds : .zero }
     override func drawFocusRingMask() {
+        guard showsFocusRing else { return }
         NSBezierPath(roundedRect: bounds, xRadius: focusRingCornerRadius,
                      yRadius: focusRingCornerRadius).fill()
     }
-    override func becomeFirstResponder() -> Bool { noteFocusRingMaskChanged(); return super.becomeFirstResponder() }
-    override func resignFirstResponder() -> Bool { noteFocusRingMaskChanged(); return super.resignFirstResponder() }
+    override func becomeFirstResponder() -> Bool {
+        showsFocusRing = (NSApp.currentEvent?.type == .keyDown) // keyboard focus only
+        noteFocusRingMaskChanged()
+        return super.becomeFirstResponder()
+    }
+    override func resignFirstResponder() -> Bool {
+        showsFocusRing = false
+        noteFocusRingMaskChanged()
+        return super.resignFirstResponder()
+    }
 
     /// The Space/Return action. Subclasses override.
     @objc func activate() {}

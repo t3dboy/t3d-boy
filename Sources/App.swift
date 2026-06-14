@@ -268,6 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(GameWindowController.toggleWormLight(_:)), keyEquivalent: "l")
         wormItem.keyEquivalentModifierMask = [.command, .control]
         gameMenu.addItem(wormItem)
+        let roadTripItem = NSMenuItem(
+            title: "Road Trip Mode",
+            action: #selector(GameWindowController.toggleRoadTripMode(_:)), keyEquivalent: "b")
+        roadTripItem.keyEquivalentModifierMask = [.command, .control]
+        gameMenu.addItem(roadTripItem)
         gameMenu.addItem(.separator())
         let saveItem = NSMenuItem(title: "Save State", action: nil, keyEquivalent: "")
         let saveSub = NSMenu(title: "Save State")

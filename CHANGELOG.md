@@ -2,6 +2,25 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [2.1.0] — 2026-06-14
+
+### Added
+- **Road Trip Mode** — a new screen effect: the late-night car ride. The screen goes dark
+  and the only light is streetlights — soft rounded pools that sweep down across the
+  screen on random angles, with dark gaps between. Turning it on switches Worm Light on
+  (and locks it) so you can still read the screen. Toggle ⌃⌘B.
+
+### Changed
+- **Hardcore Lighting now checks the hardware.** It needs an ambient-light reading, which
+  not every Mac can provide (e.g. a desktop Mac with a plain monitor). Where it can't, the
+  option is disabled with a subtle "Not compatible with this device" note under its
+  description instead of silently doing nothing. See the
+  [supported devices](docs/user-guide.md#hardcore-lighting--supported-devices) list.
+
+### Fixed
+- Keyboard focus rings no longer appear when you click a control with the mouse — they
+  show only when navigating by keyboard, as intended.
+
 ## [2.0.0] — 2026-06-14
 
 A major release built around **themes** and a top-to-bottom **accessibility** pass.

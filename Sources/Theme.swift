@@ -410,6 +410,28 @@ enum ThemedUI {
         v.heightAnchor.constraint(equalToConstant: 1).isActive = true
         return v
     }
+
+    /// A subtle rounded info chip, e.g. "Not compatible with this device".
+    static func infoPill(_ text: String) -> NSView {
+        let label = NSTextField(labelWithString: theme.cased(text))
+        label.font = theme.fontCaption
+        label.textColor = theme.textMuted
+        label.translatesAutoresizingMaskIntoConstraints = false
+        let pill = NSView()
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = 9
+        pill.layer?.backgroundColor = theme.textPrimary.withAlphaComponent(0.08).cgColor
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        pill.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 9),
+            label.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -9),
+            label.topAnchor.constraint(equalTo: pill.topAnchor, constant: 3),
+            label.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -3),
+        ])
+        pill.setContentHuggingPriority(.required, for: .horizontal)
+        return pill
+    }
 }
 
 // MARK: - Setting toggle

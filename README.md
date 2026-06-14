@@ -28,10 +28,13 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   [docs/accessibility.md](docs/accessibility.md)
 - **Authentic display effects** —
   - *Hardcore Lighting* dims the screen to your room's ambient light, like the
-    non-backlit DMG (⌃⌘H)
+    non-backlit DMG (⌃⌘H). Needs a Mac that can read ambient light — see
+    [supported devices](docs/user-guide.md#hardcore-lighting--supported-devices)
   - *Worm Light* is a warm, aimable '90s clip-on light you drag to angle (⌃⌘L)
   - *T3d LCD Real Feel™* blends frames to recreate LCD pixel persistence, so games that
     faked transparency by flickering render as intended instead of strobing
+  - *Road Trip Mode* — a dark late-night car ride lit only by streetlights sweeping past
+    on random angles; turns Worm Light on so you can still read the screen
 - **ROM library** with auto-generated box art (each game's title screen, captured by
   booting it headlessly), Game Boy / Color / Favourites tabs, sorting by popularity,
   name or play time, and per-game play-time tracking

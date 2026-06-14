@@ -112,13 +112,14 @@ controller with your Mac; T3d Boy picks it up automatically.
 
 ## Display effects
 
-Three optional effects recreate the feel of original hardware. Toggle them in the
+Four optional effects recreate the feel of original hardware. Toggle them in the
 library's effects panel, in the in-game control bar, or in **Preferences ▸ Screen
 Effects**.
 
 - **Hardcore Lighting** (⌃⌘H) — recreates the non-backlit original DMG by dimming the
-  screen to match your **room's ambient light** (read from the Mac's ambient light
-  sensor). The brighter your room, the brighter the screen — just like the real thing.
+  screen to match your **room's ambient light**. The brighter your room, the brighter the
+  screen — just like the real thing. *(Requires a Mac that can read ambient light — see
+  [supported devices](#hardcore-lighting--supported-devices) below.)*
 - **Worm Light** (⌃⌘L) — a warm, aimable '90s-style clip-on lamp that reflects across
   the screen so you can see in the dark. **Drag the glowing bulb** on the game's box-art
   preview in the library to change the angle; the new angle applies everywhere,
@@ -127,6 +128,31 @@ Effects**.
   LCD's pixel persistence ("ghosting"). Games that faked transparency by flickering
   pixels every other frame (e.g. some attract-mode demos) render as the intended steady,
   semi-transparent image instead of harsh strobing. On by default.
+- **Road Trip Mode** — *"Lighting from the back seat of your parents car at night as you
+  pass street lights."* The screen falls dark, and the only light is the glare of
+  streetlights — soft rounded pools that sweep down across the screen on random angles,
+  one after another with dark gaps between. It's deliberately hard to see, so turning it
+  on also switches **Worm Light** on (and locks it) to give you something to read the
+  screen by; turn Road Trip Mode off to unlock the Worm Light again.
+
+### Hardcore Lighting — supported devices
+
+Hardcore Lighting works by reading a brightness level that your Mac's **ambient light
+sensor** drives, so it's only offered where that reading is available:
+
+- ✅ **MacBooks, iMacs**, and other Macs with a **built-in display** (these have an
+  ambient light sensor).
+- ✅ A desktop Mac (Mac mini / Mac Studio / Mac Pro) connected to a display that has its
+  own ambient light sensor and reports brightness — e.g. the **Studio Display** or **Pro
+  Display XDR**.
+- ❌ A desktop Mac connected to a **standard third-party monitor** with no ambient light
+  sensor.
+
+On an unsupported setup the option is shown but disabled, with a subtle **"Not compatible
+with this device"** note under its description, so it's clear *why* it's unavailable
+rather than just missing. (For the dark-room look without a sensor, use **Worm Light** or
+**Road Trip Mode** instead.) If you connect or disconnect a capable display, reopen the
+window and the option updates.
 
 ---
 
@@ -205,7 +231,9 @@ Open with **⌘,**. The sidebar groups settings into three sections:
 - *Notifications* — play a sound on unlock; unlock volume; notification position.
 
 **Screen Effects**
-- Hardcore Lighting, Worm Light, T3d LCD Real Feel™ (each with a one-line description).
+- Hardcore Lighting, Worm Light, T3d LCD Real Feel™, Road Trip Mode (each with a one-line
+  description). Hardcore Lighting shows "Not compatible with this device" where the Mac
+  has no ambient-light reading; Worm Light is locked on while Road Trip Mode is active.
 
 **Appearance**
 - *Theme* — Classic / Pistachio / Engineer.
@@ -226,6 +254,7 @@ Open with **⌘,**. The sidebar groups settings into three sections:
 | Load state (slots 1–5) | ⇧⌘1 – ⇧⌘5 |
 | Hardcore Lighting | ⌃⌘H |
 | Worm Light | ⌃⌘L |
+| Road Trip Mode | ⌃⌘B |
 | Toggle Dark Mode | ⇧⌘D |
 
 ---
@@ -239,6 +268,12 @@ Open with **⌘,**. The sidebar groups settings into three sections:
   it only needs generating once.
 - **Worm Light is pointing the wrong way.** Drag the glowing bulb on the box-art preview
   in the library to re-aim it.
+- **Hardcore Lighting says "Not compatible with this device".** Your Mac has no ambient
+  light reading (e.g. a desktop Mac with a plain monitor). See
+  [supported devices](#hardcore-lighting--supported-devices). Use Worm Light or Road Trip
+  Mode for a dark-room feel instead.
+- **Can't turn Worm Light off.** It's locked on while **Road Trip Mode** is active — turn
+  Road Trip Mode off first.
 - **Can't load a save state.** Hardcore mode blocks save-state loading; turn it off in
   Preferences ▸ Achievements, or accept the "disable hardcore for this session" prompt.
 - **Installing the app** (first-launch security warning) and **supplying ROMs** are
