@@ -17,7 +17,7 @@ final class Chip: NSView {
         super.init(frame: .zero)
         self.tone = tone
         wantsLayer = true
-        label.font = .systemFont(ofSize: 10, weight: .semibold)
+        label.font = uiFont(10, .semibold)
         label.stringValue = text
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
@@ -43,8 +43,8 @@ final class Chip: NSView {
     private func color(for tone: Tone) -> NSColor {
         switch tone {
         case .neutral: return .secondaryLabelColor
-        case .accent:  return .controlAccentColor
-        case .warn:    return .systemOrange
+        case .accent:  return theme.accent
+        case .warn:    return theme.warm
         case .good:    return .systemGreen
         case .hot:     return .systemPink
         }
@@ -100,7 +100,7 @@ final class AchievementsHeaderView: NSView {
         boxArt.imageScaling = .scaleProportionallyUpOrDown   // smooth — raster art
         boxArt.translatesAutoresizingMaskIntoConstraints = false
 
-        titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        titleLabel.font = uiFont(15, .bold)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 2
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -109,13 +109,13 @@ final class AchievementsHeaderView: NSView {
         pointsLabel.textColor = .secondaryLabelColor
         pointsLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        richLabel.font = .systemFont(ofSize: 11)
+        richLabel.font = uiFont(11)
         richLabel.textColor = .secondaryLabelColor
         richLabel.maximumNumberOfLines = 2
         richLabel.lineBreakMode = .byTruncatingTail
         richLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        percentLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        percentLabel.font = uiFont(11, .bold)
         percentLabel.alignment = .center
         percentLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -234,7 +234,7 @@ final class AchievementsHeaderView: NSView {
 
     private func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            boxArt.layer?.borderColor = NSColor.separatorColor.cgColor
+            boxArt.layer?.borderColor = theme.lineHair.cgColor
             boxArt.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.05).cgColor
             percentLabel.textColor = .labelColor
         }
@@ -296,7 +296,7 @@ final class ProgressArcView: NSView {
     private func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             track.strokeColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
-            fill.strokeColor = NSColor.controlAccentColor.cgColor
+            fill.strokeColor = theme.accent.cgColor
         }
     }
 
@@ -349,7 +349,7 @@ final class SignInBanner: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.cornerRadius = 9
-        label.font = .systemFont(ofSize: 11.5, weight: .medium)
+        label.font = uiFont(11.5, .medium)
         label.stringValue = "Sign in to track your progress  ›"
         label.lineBreakMode = .byTruncatingTail
         label.translatesAutoresizingMaskIntoConstraints = false
@@ -368,8 +368,8 @@ final class SignInBanner: NSView {
 
     private func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
-            label.textColor = .controlAccentColor
+            layer?.backgroundColor = theme.accent.withAlphaComponent(0.12).cgColor
+            label.textColor = theme.accent
         }
     }
 
@@ -389,12 +389,12 @@ final class EmptyStateView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        titleLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        titleLabel.font = uiFont(14, .semibold)
         titleLabel.alignment = .center
         titleLabel.textColor = .secondaryLabelColor
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        messageLabel.font = .systemFont(ofSize: 12)
+        messageLabel.font = uiFont(12)
         messageLabel.alignment = .center
         messageLabel.textColor = .tertiaryLabelColor
         messageLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -403,7 +403,7 @@ final class EmptyStateView: NSView {
         linkButton.bezelStyle = .inline
         linkButton.target = self
         linkButton.action = #selector(openLink)
-        linkButton.contentTintColor = .controlAccentColor
+        linkButton.contentTintColor = theme.accent
         linkButton.translatesAutoresizingMaskIntoConstraints = false
         linkButton.isHidden = true
 
@@ -430,8 +430,8 @@ final class EmptyStateView: NSView {
         self.linkURL = linkURL
         if let linkTitle, linkURL != nil {
             let attr = NSAttributedString(string: linkTitle, attributes: [
-                .foregroundColor: NSColor.controlAccentColor,
-                .font: NSFont.systemFont(ofSize: 12, weight: .medium),
+                .foregroundColor: theme.accent,
+                .font: uiFont(12, .medium),
                 .underlineStyle: NSUnderlineStyle.single.rawValue,
             ])
             linkButton.attributedTitle = attr
@@ -459,9 +459,9 @@ final class SectionHeaderView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        disclosure.font = .systemFont(ofSize: 9, weight: .bold)
+        disclosure.font = uiFont(9, .bold)
         disclosure.textColor = .secondaryLabelColor
-        titleLabel.font = .systemFont(ofSize: 11, weight: .bold)
+        titleLabel.font = uiFont(11, .bold)
         titleLabel.textColor = .secondaryLabelColor
         countLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
         countLabel.textColor = .tertiaryLabelColor
@@ -530,11 +530,11 @@ final class AchievementCardView: NSView {
         lockOverlay.cornerRadius = 8
         badge.layer?.addSublayer(lockOverlay)
 
-        titleLabel.font = .systemFont(ofSize: 12.5, weight: .semibold)
+        titleLabel.font = uiFont(12.5, .semibold)
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        detailLabel.font = .systemFont(ofSize: 11)
+        detailLabel.font = uiFont(11)
         detailLabel.textColor = .secondaryLabelColor
         detailLabel.maximumNumberOfLines = 3
         detailLabel.lineBreakMode = .byTruncatingTail
@@ -546,7 +546,7 @@ final class AchievementCardView: NSView {
         pointsLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         pointsLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        dateLabel.font = .systemFont(ofSize: 9.5)
+        dateLabel.font = uiFont(9.5)
         dateLabel.textColor = .tertiaryLabelColor
         dateLabel.alignment = .right
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -692,7 +692,7 @@ final class AchievementCardView: NSView {
         guard let layer else { return }
         let anim = CABasicAnimation(keyPath: "borderColor")
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            anim.fromValue = NSColor.controlAccentColor.cgColor
+            anim.fromValue = theme.accent.cgColor
             anim.toValue = layer.borderColor
         }
         anim.duration = 1.1
@@ -710,29 +710,29 @@ final class AchievementCardView: NSView {
                 lockOverlay.isHidden = false
                 pointsLabel.textColor = .secondaryLabelColor
             case .unlockedSoftcore:
-                layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.07).cgColor
+                layer?.backgroundColor = theme.accent.withAlphaComponent(0.07).cgColor
                 titleLabel.textColor = .labelColor
                 badge.alphaValue = 1
                 lockOverlay.isHidden = true
-                pointsLabel.textColor = .controlAccentColor
+                pointsLabel.textColor = theme.accent
             case .unlockedHardcore:
-                layer?.backgroundColor = NSColor.systemOrange.withAlphaComponent(0.09).cgColor
+                layer?.backgroundColor = theme.warm.withAlphaComponent(0.09).cgColor
                 titleLabel.textColor = .labelColor
                 badge.alphaValue = 1
                 lockOverlay.isHidden = true
-                pointsLabel.textColor = .systemOrange
+                pointsLabel.textColor = theme.warm
             }
 
             // Primed accent border (challenge close to triggering).
             if primed {
-                layer?.borderColor = NSColor.systemYellow.withAlphaComponent(0.9).cgColor
+                layer?.borderColor = theme.star.withAlphaComponent(0.9).cgColor
                 layer?.borderWidth = 1.5
             } else {
                 switch state {
                 case .unlockedHardcore:
-                    layer?.borderColor = NSColor.systemOrange.withAlphaComponent(0.4).cgColor
+                    layer?.borderColor = theme.warm.withAlphaComponent(0.4).cgColor
                 case .unlockedSoftcore:
-                    layer?.borderColor = NSColor.controlAccentColor.withAlphaComponent(0.35).cgColor
+                    layer?.borderColor = theme.accent.withAlphaComponent(0.35).cgColor
                 case .locked:
                     layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
                 }
@@ -740,7 +740,7 @@ final class AchievementCardView: NSView {
             }
 
             progressTrack.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.10).cgColor
-            progressFill.layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+            progressFill.layer?.backgroundColor = theme.accent.cgColor
         }
     }
 

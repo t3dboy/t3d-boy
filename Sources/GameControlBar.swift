@@ -69,6 +69,7 @@ final class GameControlBar: NSView {
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
         b.contentTintColor = NSColor.white.withAlphaComponent(0.78)
         b.toolTip = tip
+        b.setAccessibilityLabel(tip)
         b.translatesAutoresizingMaskIntoConstraints = false
         b.widthAnchor.constraint(equalToConstant: 30).isActive = true
         b.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -93,9 +94,9 @@ final class GameControlBar: NSView {
     /// Tint the lighting toggles when active so their state reads at a glance.
     func refreshStates() {
         hardcoreBtn.contentTintColor = HardcoreLighting.isEnabled
-            ? .systemYellow : NSColor.white.withAlphaComponent(0.7)
+            ? theme.star : NSColor.white.withAlphaComponent(0.7)
         wormBtn.contentTintColor = WormLight.isEnabled
-            ? .systemOrange : NSColor.white.withAlphaComponent(0.7)
+            ? theme.warm : NSColor.white.withAlphaComponent(0.7)
     }
 
     func setFullScreen(_ on: Bool) {

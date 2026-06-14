@@ -24,7 +24,7 @@ final class Achievements {
     /// The logged-in account, or nil when logged out.
     private(set) var account: RAAccount?
 
-    private let tokenStore: RATokenStoring = KeychainTokenStore()
+    private let tokenStore: RATokenStoring = makeTokenStore()
 
     /// Whether RA hardcore mode is requested. We default OFF; the host opts in.
     private var hardcoreRequested = false

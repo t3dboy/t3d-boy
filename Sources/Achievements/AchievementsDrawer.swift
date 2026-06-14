@@ -77,6 +77,7 @@ final class AchievementsDrawer: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
+        layer?.backgroundColor = (theme.skinned ? theme.surfacePanel : .clear).cgColor
         build()
         observer = NotificationCenter.default.addObserver(
             forName: .achievementsChanged, object: nil, queue: .main
@@ -304,10 +305,11 @@ final class AchievementsDrawer: NSView {
     }
 
     private func openSignInHelp() {
-        // Best-effort: point the user at the website. Host owns real login UI.
-        if let url = URL(string: "https://retroachievements.org") {
-            NSWorkspace.shared.open(url)
-        }
+        // Open the in-app RetroAchievements login (Preferences ▸ Achievements ▸ Account),
+        // not the website — that's where the user actually signs in.
+        let app = NSApp.delegate as? AppDelegate
+        app?.showPreferences(nil)
+        app?.preferences?.selectSection(0) // Achievements (Account) is the first tab
     }
 }
 

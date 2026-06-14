@@ -10,14 +10,20 @@
 
 import Cocoa
 
-final class DrawerHandle: NSView {
+final class DrawerHandle: FocusableControl {
     /// Called when the user clicks the handle.
     var onToggle: (() -> Void)?
+
+    override var focusRingCornerRadius: CGFloat { 8 }
+    override func activate() { onToggle?() }
 
     /// When true the drawer is open: the chevron points left ("<", click to close).
     /// When false it's closed: the chevron points right (">", click to open).
     var isExpanded = false {
-        didSet { updateChevron(animated: true) }
+        didSet {
+            updateChevron(animated: true)
+            setAccessibilityLabel(isExpanded ? "Hide achievements" : "Show achievements")
+        }
     }
 
     private let trophy = NSImageView()
@@ -37,6 +43,7 @@ final class DrawerHandle: NSView {
             .withSymbolConfiguration(cfg)
         trophy.image?.isTemplate = true
         trophy.imageScaling = .scaleProportionallyUpOrDown
+        trophy.setAccessibilityElement(false) // the handle itself is the AX element
         addSubview(trophy)
 
         chevron.fillColor = NSColor.clear.cgColor
@@ -46,6 +53,9 @@ final class DrawerHandle: NSView {
         layer?.addSublayer(chevron)
 
         toolTip = "Show achievements"
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Show achievements")
         refreshColors()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -121,11 +131,16 @@ final class DrawerHandle: NSView {
         }
     }
 
+    // MARK: Accessibility — button configured via setters (see init / isExpanded).
+    override func accessibilityPerformPress() -> Bool { onToggle?(); return true }
+
     private func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let fill = NSColor.labelColor.withAlphaComponent(hovered ? 0.18 : 0.10)
+            let fill = theme.skinned
+                ? theme.surfaceInset.withAlphaComponent(hovered ? 1 : 0.85)
+                : NSColor.labelColor.withAlphaComponent(hovered ? 0.18 : 0.10)
             pill.backgroundColor = fill.cgColor
-            let ink = hovered ? NSColor.labelColor : NSColor.secondaryLabelColor
+            let ink = hovered ? theme.textPrimary : theme.textSecondary
             chevron.strokeColor = ink.cgColor
             trophy.contentTintColor = ink
         }

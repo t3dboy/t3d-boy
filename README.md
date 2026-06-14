@@ -6,33 +6,39 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 
 ## Features
 
-- **Full Game Boy (DMG) and Game Boy Color emulation** — SM83 CPU, scanline PPU,
-  timers, interrupts, OAM/HDMA DMA, MBC1/2/3/5 cartridges, double-speed mode
-- **Sound** — all four audio channels via a cycle-stepped APU
-- **ROM library** with auto-generated box art (each game's title screen, captured
-  by booting it headlessly), GB / GBC / Favourites tabs, sorting by name,
-  review score, or play time, and per-game play-time tracking
-- **Per-system ROM folders** — point each tab at its own folder
-- **Save states** (5 slots per game), **pause**, and a **fake boot screen** with
-  T3d's chime
-- **Focused play** — games open by zooming out of their box art into a clean,
-  chrome-free window (with a power-switch click and dimmed surroundings); a subtle
-  auto-hiding control bar offers lighting toggles, full screen, and exit
-- **Hardcore Lighting** — recreates the non-backlit DMG by dimming the screen to match
-  your room's ambient light (⌃⌘H)
-- **Worm Light** — a warm, aimable '90s-style clip-on light that reflects across the
-  screen so you can see in the dark; drag it on the game preview display to angle it (⌃⌘L)
-- **T3d LCD Real Feel™** — blends each frame with the last to recreate an old LCD's
-  pixel persistence, so games that fake transparency by flickering pixels render as
-  intended instead of strobing
-- **RetroAchievements** — optional sign-in to track unlocks, points, leaderboards,
-  and mastery, with an achievements drawer you can pop out in the library or in-game,
-  plus an optional hardcore mode. See [docs/retroachievements.md](docs/retroachievements.md)
-- **Game controller support** (DualShock / DualSense / Xbox / Switch Pro over
-  Bluetooth) via Apple's GameController framework
-- **Preferences (⌘,)** for RetroAchievements and appearance — **dark mode by
-  default** (switchable to light) and an optional **FPS counter**
-- A guided **first-run onboarding** hosted by **T3d**, the pixel mascot
+- **Three switchable themes** — give the whole app a different personality from
+  Preferences ▸ Appearance:
+  - **Classic** — clean, system-native macOS (light or dark).
+  - **Pistachio** *(default)* — a warm soft-dark skin with rounded type and a coral /
+    pistachio palette.
+  - **Engineer** — a boutique-synth-style hardware look: a light-grey "device" body
+    with orange rubber keys, red-LED read-outs, a drilled speaker grille, hex screws, and
+    a live LED counter of your total play time.
+- **Full Game Boy (DMG) and Game Boy Color emulation** — SM83 CPU, scanline PPU, timers,
+  interrupts, OAM/HDMA DMA, MBC1/2/3/5 cartridges, double-speed mode, and all four audio
+  channels via a cycle-stepped APU
+- **RetroAchievements** — optional sign-in to track unlocks, points, leaderboards and
+  mastery, with a pop-out achievements drawer (in the library or in-game) and an optional
+  hardcore mode. See [docs/retroachievements.md](docs/retroachievements.md)
+- **Focused play** — games open by zooming out of their box art into a clean, chrome-free
+  window with a power-switch click and dimmed surroundings; a subtle auto-hiding control
+  bar offers the lighting toggles, full screen, and exit
+- **Built for everyone** — full **VoiceOver** support and **keyboard navigation**
+  (Tab + focus rings), plus **Reduce Motion** support. See
+  [docs/accessibility.md](docs/accessibility.md)
+- **Authentic display effects** —
+  - *Hardcore Lighting* dims the screen to your room's ambient light, like the
+    non-backlit DMG (⌃⌘H)
+  - *Worm Light* is a warm, aimable '90s clip-on light you drag to angle (⌃⌘L)
+  - *T3d LCD Real Feel™* blends frames to recreate LCD pixel persistence, so games that
+    faked transparency by flickering render as intended instead of strobing
+- **ROM library** with auto-generated box art (each game's title screen, captured by
+  booting it headlessly), Game Boy / Color / Favourites tabs, sorting by popularity,
+  name or play time, and per-game play-time tracking
+- **Save states** (5 slots per game), **pause**, and **game controller support**
+  (DualShock / DualSense / Xbox / Switch Pro over Bluetooth)
+
+📖 **Full feature walkthrough: [docs/user-guide.md](docs/user-guide.md)**
 
 ## Controls
 

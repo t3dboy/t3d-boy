@@ -62,10 +62,10 @@ final class RALoginForm: NSView {
         createLink.contentTintColor = .linkColor
         createLink.target = self
         createLink.action = #selector(openCreateAccount)
-        createLink.font = .systemFont(ofSize: 11)
+        createLink.font = theme.fontCaption
 
-        status.font = .systemFont(ofSize: 11)
-        status.textColor = .secondaryLabelColor
+        status.font = theme.fontCaption
+        status.textColor = theme.textSecondary
         status.lineBreakMode = .byWordWrapping
         status.maximumNumberOfLines = 2
         status.preferredMaxLayoutWidth = 260
@@ -82,10 +82,11 @@ final class RALoginForm: NSView {
 
         if Achievements.shared.isLoggedIn, let account = Achievements.shared.account {
             let who = NSTextField(labelWithString: "Signed in as \(account.username)")
-            who.font = .systemFont(ofSize: 13, weight: .semibold)
+            who.font = theme.skinned ? .rounded(13, .medium) : .systemFont(ofSize: 13, weight: .semibold)
+            who.textColor = theme.textPrimary
             let pts = NSTextField(labelWithString: "\(account.points) points")
-            pts.font = .systemFont(ofSize: 11)
-            pts.textColor = .secondaryLabelColor
+            pts.font = theme.fontCaption
+            pts.textColor = theme.textSecondary
             let signOut = NSButton(title: "Sign Out", target: self, action: #selector(signOut))
             signOut.bezelStyle = .rounded
             stack.addArrangedSubview(who)
@@ -94,8 +95,8 @@ final class RALoginForm: NSView {
         } else if !Achievements.shared.isAvailable {
             let msg = NSTextField(wrappingLabelWithString:
                 "RetroAchievements is unavailable right now. The emulator works normally without it.")
-            msg.font = .systemFont(ofSize: 12)
-            msg.textColor = .secondaryLabelColor
+            msg.font = theme.fontCaption
+            msg.textColor = theme.textSecondary
             msg.preferredMaxLayoutWidth = 260
             stack.addArrangedSubview(msg)
         } else {
@@ -157,7 +158,7 @@ final class RALoginForm: NSView {
 
     private func showStatus(_ text: String, error: Bool) {
         status.stringValue = text
-        status.textColor = error ? .systemRed : .secondaryLabelColor
+        status.textColor = error ? .systemRed : theme.textSecondary
         if status.superview == nil, !text.isEmpty { stack.addArrangedSubview(status) }
     }
 

@@ -41,6 +41,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .raSettingsChanged, object: nil, queue: .main
         ) { [weak self] _ in self?.achievementToasts?.corner = RASettings.toastCorner }
 
+        // A theme switch rebuilds the open windows from scratch — many controls bake
+        // the active theme (fonts, colours, lowercase) at construction and table cells
+        // are cached, so recreating the controllers is the clean way to restyle live.
+        NotificationCenter.default.addObserver(
+            forName: .themeChanged, object: nil, queue: .main
+        ) { [weak self] _ in DispatchQueue.main.async { self?.rebuildForTheme() } }
+
         // Direct ROM path on the command line (testing) skips the library
         let args = CommandLine.arguments
         if args.count > 1, FileManager.default.fileExists(atPath: args[1]) {
@@ -77,6 +84,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             library?.reload()
         } else {
             showOnboarding(mode: .firstRun) // first launch: T3d takes it from here
+        }
+    }
+
+    /// Recreate the library and preferences windows so the newly-selected theme
+    /// applies everywhere. Preserves which were on screen.
+    private func rebuildForTheme() {
+        applyStoredAppearance() // a theme may force light/dark (Engineer is light-only)
+        if let oldLib = library {
+            let wasVisible = oldLib.window?.isVisible ?? false
+            let oldOrigin = oldLib.window?.frame.origin
+            oldLib.close()
+            let lib = LibraryWindowController()
+            lib.onPlay = { [weak self] url, rect in self?.play(url: url, from: rect) }
+            library = lib
+            if wasVisible {
+                lib.showWindow(nil) // adopts the new theme's own size
+                // Keep the window roughly where it was (themes have different sizes, so
+                // don't carry the old size over — Engineer is larger than the others).
+                if let oldOrigin, let w = lib.window {
+                    var f = w.frame; f.origin = oldOrigin; w.setFrame(f, display: false)
+                }
+                if ROMFolders.isConfigured { lib.reload() }
+            }
+        }
+        if let oldPrefs = preferences, oldPrefs.window?.isVisible == true {
+            let section = oldPrefs.selectedSection
+            oldPrefs.close()
+            let prefs = PreferencesWindowController()
+            preferences = prefs
+            prefs.showWindow(nil)
+            prefs.selectSection(section) // stay on the same tab (e.g. Appearance)
+            prefs.window?.makeKeyAndOrderFront(nil)
         }
     }
 
@@ -158,8 +197,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyStoredAppearance() {
-        // Dark by default (first run, no stored choice); the user can switch to light
-        // in Preferences ▸ Appearance, which persists.
+        // A skinned theme may force its own appearance (e.g. Engineer is light-only,
+        // Pistachio dark); otherwise honour the user's Dark mode choice (dark by default).
+        if let forced = theme.forcedAppearance {
+            NSApp.appearance = NSAppearance(named: forced)
+            return
+        }
         switch UserDefaults.standard.string(forKey: AppDelegate.appearanceKey) {
         case "light": NSApp.appearance = NSAppearance(named: .aqua)
         default: NSApp.appearance = NSAppearance(named: .darkAqua)

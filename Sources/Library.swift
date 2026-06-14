@@ -265,13 +265,16 @@ final class ArtView: NSView {
         wantsLayer = true
         layer?.magnificationFilter = .nearest
         layer?.contentsGravity = .resizeAspect
-        layer?.cornerRadius = 14
+        layer?.cornerRadius = theme.skinned ? 7 : 14
         layer?.masksToBounds = true
-        layer?.backgroundColor = NSColor.black.withAlphaComponent(0.15).cgColor
+        layer?.backgroundColor = theme.surfaceScreen.cgColor
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor.cgColor
+        layer?.borderColor = theme.controlEdge.cgColor
         effects = ScreenEffects(host: layer!)
         effects.layout(bounds)
+        setAccessibilityElement(true)
+        setAccessibilityRole(.image)
+        setAccessibilityLabel("Box art")
 
         goosenecLayer.fillColor = NSColor.clear.cgColor
         goosenecLayer.strokeColor = NSColor(srgbRed: 1, green: 0.85, blue: 0.55, alpha: 0.45).cgColor
@@ -392,18 +395,22 @@ final class ArtView: NSView {
 final class ROMCellView: NSTableCellView {
     let nameLabel = NSTextField(labelWithString: "")
     let statLabel = NSTextField(labelWithString: "")
-    private let separator = NSBox()
+    private let separator = NSView()
 
     init() {
         super.init(frame: .zero)
         nameLabel.lineBreakMode = .byTruncatingTail
-        nameLabel.font = .systemFont(ofSize: 13)
-        statLabel.font = .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
-        statLabel.textColor = .secondaryLabelColor
+        nameLabel.font = theme.skinned ? .rounded(13, .regular) : .systemFont(ofSize: 13)
+        nameLabel.textColor = theme.textListIdle
+        statLabel.font = theme.skinned
+            ? .monospacedSystemFont(ofSize: 10, weight: .regular)
+            : .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular)
+        statLabel.textColor = theme.textMuted
         statLabel.alignment = .right
         statLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
         statLabel.setContentHuggingPriority(.required, for: .horizontal)
-        separator.boxType = .separator
+        separator.wantsLayer = true
+        separator.layer?.backgroundColor = theme.lineHair.cgColor
 
         for v in [nameLabel, statLabel, separator] {
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -419,10 +426,45 @@ final class ROMCellView: NSTableCellView {
             statLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             separator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
             separator.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
+            separator.heightAnchor.constraint(equalToConstant: 1),
             separator.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    /// Recolour the title/stats so they stay legible on the themed selection fill.
+    /// Driven by the row's selection state (not `backgroundStyle`/emphasis), so a
+    /// selected row stays readable even when the window isn't key.
+    func applySelection(_ selected: Bool) {
+        guard theme.skinned else { return } // classic uses the native emphasis recolour
+        nameLabel.textColor = selected ? theme.onLight : theme.textListIdle
+        statLabel.textColor = selected ? NSColor.white.withAlphaComponent(0.7) : theme.textMuted
+    }
+}
+
+/// Table row view that draws the theme's selection treatment (a solid/tinted fill with
+/// an accent left border in skinned themes, the system highlight otherwise) and keeps
+/// its cell's text legible against that fill regardless of window focus.
+final class ThemedRowView: NSTableRowView {
+    override var isSelected: Bool {
+        get { super.isSelected }
+        set { super.isSelected = newValue; restyleCell() }
+    }
+    override func didAddSubview(_ subview: NSView) {
+        super.didAddSubview(subview)
+        restyleCell()
+    }
+    private func restyleCell() {
+        for v in subviews { (v as? ROMCellView)?.applySelection(isSelected) }
+    }
+    override func drawSelection(in dirtyRect: NSRect) {
+        guard isSelected else { return }
+        guard theme.skinned else { super.drawSelection(in: dirtyRect); return }
+        theme.selection.setFill()
+        bounds.fill()
+        theme.selectionEdge.setFill()
+        NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill()
+    }
 }
 
 final class LibraryWindowController: NSWindowController, NSTableViewDataSource, NSTableViewDelegate, NSWindowDelegate {
@@ -434,7 +476,15 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     // Remembered across window close/reopen and app launches.
     private var lastSelectedPath: String? = UserDefaults.standard.string(forKey: lastSelectedKey)
     private static let lastSelectedKey = "library.lastSelectedROM"
-    private let tabs = PillTabBar(titles: ["Game Boy", "Game Boy Color", "Favourites"])
+    private let tabs = PillTabBar(titles: LibraryWindowController.tabTitles())
+
+    /// Console-tab labels. Engineer's keys are narrow and uppercase, so the middle tab
+    /// is shortened to "Color" to avoid clipping "GAME BOY COLOR".
+    private static func tabTitles() -> [String] {
+        theme.id == "engineer"
+            ? ["Game Boy", "Color", "Favourites"]
+            : ["Game Boy", "Game Boy Color", "Favourites"]
+    }
     private let tableView = NSTableView()
     private let favButton = CapsuleButton(title: "☆ Favourite", style: .neutral)
     private let sortPopup = PillDropdown(
@@ -449,11 +499,14 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         title: "Change", style: .neutral, fontSize: 11, height: 24)
     private let playButton = CapsuleButton(title: "▶  Play", style: .prominent)
     private let emptyLabel = NSTextField(labelWithString: "")
+    // Warm background behind the ROM list (skinned themes only)
+    private let listPanel = NSView()
+    private let listDivider = NSView()
     // "Lighting" housing under the artwork
     private let effectsHousing = NSView()
-    private let hardcoreSwitch = NSSwitch()
-    private let wormSwitch = NSSwitch()
-    private let lcdSwitch = NSSwitch()
+    private let hardcoreSwitch = SettingToggle()
+    private let wormSwitch = SettingToggle()
+    private let lcdSwitch = SettingToggle()
     private var effectsTimer: Timer?
 
     // Achievements drawer: tucked off the right edge, popped out via the handle to
@@ -469,15 +522,25 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     var onPlay: ((URL, NSRect) -> Void)?
 
+    /// The Engineer theme wraps the library in device chrome (I/O bar, header plate,
+    /// trim) and needs extra vertical room.
+    private var isEngineer: Bool { theme.id == "engineer" }
+    private var topInset: CGFloat { isEngineer ? 130 : 10 }
+    private var bottomInset: CGFloat { isEngineer ? 34 : 12 }
+
     init() {
+        let engineer = ThemeManager.shared.current.id == "engineer"
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 600),
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: engineer ? 740 : 600),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "T3d Boy — ROM Library"
-        window.minSize = NSSize(width: 720, height: 540)
+        window.minSize = NSSize(width: 760, height: engineer ? 700 : 540)
         super.init(window: window)
         window.delegate = self
+        // Don't let macOS restore a stale saved frame over our themed size — the Engineer
+        // theme needs a wider/taller window than the others, and restoration was clobbering it.
+        window.isRestorable = false
         buildUI()
         window.center()
         NotificationCenter.default.addObserver(
@@ -503,6 +566,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     private func buildUI() {
         guard let content = window?.contentView else { return }
+        content.wantsLayer = true
+
+        // Warm list-pane background sits behind everything (skinned themes only).
+        listPanel.wantsLayer = true
+        listPanel.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(listPanel)
 
         // Tabs above the list: Game Boy / Game Boy Color / Favourites
         tabs.onChange = { [weak self] _ in self?.tabChanged() }
@@ -584,8 +653,8 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         content.addSubview(emptyLabel)
 
         // Hairline divider between the list and the detail pane
-        let divider = NSBox()
-        divider.boxType = .separator
+        let divider = listDivider
+        divider.wantsLayer = true
         divider.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(divider)
 
@@ -608,11 +677,11 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
         // The art keeps the Game Boy screen's 10:9 aspect and sizes itself
         // bottom-up so the title/play button never collide with the bottom bar
-        let artTop = artView.topAnchor.constraint(equalTo: content.topAnchor, constant: 24)
+        let artTop = artView.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset + 14)
         artTop.priority = .defaultLow
 
         NSLayoutConstraint.activate([
-            tabs.topAnchor.constraint(equalTo: content.topAnchor, constant: 10),
+            tabs.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
             tabs.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 10),
             tabs.widthAnchor.constraint(equalToConstant: 296),
 
@@ -629,7 +698,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             folderBar.leadingAnchor.constraint(equalTo: tabs.leadingAnchor),
             folderBar.widthAnchor.constraint(equalTo: tabs.widthAnchor),
             folderBar.heightAnchor.constraint(equalToConstant: 30),
-            folderBar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -12),
+            folderBar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -bottomInset),
 
             folderBarLabel.leadingAnchor.constraint(equalTo: folderBar.leadingAnchor, constant: 10),
             folderBarLabel.centerYAnchor.constraint(equalTo: folderBar.centerYAnchor),
@@ -639,8 +708,15 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             folderBarButton.centerYAnchor.constraint(equalTo: folderBar.centerYAnchor),
 
             divider.leadingAnchor.constraint(equalTo: scroll.trailingAnchor, constant: 1),
-            divider.topAnchor.constraint(equalTo: content.topAnchor, constant: 10),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+            divider.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
             divider.bottomAnchor.constraint(equalTo: folderBar.topAnchor, constant: -8),
+
+            // List-pane background spans the whole left column behind the list chrome.
+            listPanel.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            listPanel.topAnchor.constraint(equalTo: content.topAnchor),
+            listPanel.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            listPanel.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
 
             rightArea.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
             rightArea.trailingAnchor.constraint(equalTo: achievementsDrawer.leadingAnchor),
@@ -659,7 +735,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             // Lighting housing sits flush at the bottom of the detail column
             effectsHousing.leadingAnchor.constraint(equalTo: rightArea.leadingAnchor, constant: 24),
             effectsHousing.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -24),
-            effectsHousing.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -14),
+            effectsHousing.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -(bottomInset + 2)),
 
             playButton.bottomAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: -16),
             playButton.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor, constant: -55),
@@ -678,7 +754,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
             artView.bottomAnchor.constraint(equalTo: titleLabel.topAnchor, constant: -16),
             artTop,
-            artView.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 24),
+            artView.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: topInset + 14),
             artView.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor),
             artView.widthAnchor.constraint(equalTo: artView.heightAnchor, multiplier: 10.0 / 9.0),
             artView.widthAnchor.constraint(lessThanOrEqualTo: rightArea.widthAnchor, constant: -48),
@@ -691,16 +767,87 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         drawerWidthConstraint = achievementsDrawer.widthAnchor.constraint(equalToConstant: 0)
         drawerWidthConstraint.isActive = true
 
-        refreshFolderBarColor()
+        if isEngineer { addEngineerChrome(content) }
+
+        styleChrome()
     }
 
-    private func refreshFolderBarColor() {
+    /// Device flair for the Engineer theme: I/O bar, engraved header plate + speaker
+    /// grille, bottom trim, and the LIBRARY label with the live total-minutes LED.
+    private func addEngineerChrome(_ content: NSView) {
+        let ioBar = EngineerIOBar()
+        let plate = EngineerHeaderPlate()
+        let trim = EngineerTrim()
+        for v in [ioBar, plate, trim] { content.addSubview(v) }
+
+        // The header plate + grille give the content a small natural fitting width; the
+        // window show-path sizes to that and collapses the detail column. Hold a real
+        // minimum width so the device keeps its intended proportions.
+        content.widthAnchor.constraint(greaterThanOrEqualToConstant: 868).isActive = true
+
+        // "LIBRARY 一覧" label + the red-LED total-minutes read-out, above the tabs.
+        let libLabel = NSTextField(labelWithString: "LIBRARY")
+        libLabel.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        libLabel.textColor = theme.textSecondary
+        let kata = NSTextField(labelWithString: "一覧")
+        kata.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        kata.textColor = theme.accent
+        let labelRow = NSStackView(views: [libLabel, kata])
+        labelRow.spacing = 5
+        labelRow.translatesAutoresizingMaskIntoConstraints = false
+        let minutes = MinutesLED()
+        content.addSubview(labelRow); content.addSubview(minutes)
+
+        NSLayoutConstraint.activate([
+            ioBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            ioBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            ioBar.topAnchor.constraint(equalTo: content.topAnchor),
+
+            plate.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            plate.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            plate.topAnchor.constraint(equalTo: ioBar.bottomAnchor),
+
+            trim.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            trim.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            trim.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
+            labelRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
+            labelRow.topAnchor.constraint(equalTo: plate.bottomAnchor, constant: 10),
+            minutes.trailingAnchor.constraint(equalTo: tabs.trailingAnchor),
+            minutes.centerYAnchor.constraint(equalTo: labelRow.centerYAnchor),
+        ])
+    }
+
+    /// Applies the active theme's surfaces, fonts and colours to the window chrome.
+    /// Called on build and whenever the theme or appearance changes.
+    private func styleChrome() {
+        window?.title = theme.cased("T3d Boy — ROM Library")
+        window?.backgroundColor = theme.skinned ? theme.surfaceWindow : .windowBackgroundColor
+
+        titleLabel.font = theme.fontDetailTitle
+        titleLabel.textColor = theme.textPrimary
+        statsLabel.font = theme.skinned
+            ? .monospacedSystemFont(ofSize: 11, weight: .regular)
+            : .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        statsLabel.textColor = theme.textMuted
+        emptyLabel.textColor = theme.textMuted
+        folderBarLabel.font = theme.fontCaption
+        folderBarLabel.textColor = theme.textMuted
+
         (window?.contentView?.effectiveAppearance ?? NSApp.effectiveAppearance)
             .performAsCurrentDrawingAppearance {
-                let tint = NSColor.labelColor.withAlphaComponent(0.06).cgColor
-                folderBar.layer?.backgroundColor = tint
-                effectsHousing.layer?.backgroundColor = tint
+                let panelTint = theme.skinned ? theme.surfacePanel
+                    : NSColor.labelColor.withAlphaComponent(0.06)
+                listPanel.layer?.backgroundColor = theme.skinned ? theme.surfacePanel.cgColor : NSColor.clear.cgColor
+                folderBar.layer?.backgroundColor = (theme.skinned ? theme.surfaceFooter : panelTint).cgColor
+                effectsHousing.layer?.backgroundColor = panelTint.cgColor
+                listDivider.layer?.backgroundColor = theme.lineHard.cgColor
+                effectsHousing.layer?.borderWidth = theme.skinned ? 1 : 0
+                effectsHousing.layer?.borderColor = theme.lineHard.cgColor
+                folderBar.layer?.cornerRadius = theme.skinned ? theme.radiusMedium : 7
+                effectsHousing.layer?.cornerRadius = theme.skinned ? theme.radiusMedium : 10
             }
+        tableView.reloadData()
     }
 
     // MARK: - Lighting housing (Hardcore / Worm Light toggles + hints)
@@ -711,15 +858,16 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         effectsHousing.translatesAutoresizingMaskIntoConstraints = false
 
         func title(_ s: String) -> NSTextField {
-            let t = NSTextField(labelWithString: s)
-            t.font = .systemFont(ofSize: 13, weight: .semibold)
+            let t = NSTextField(labelWithString: theme.cased(s))
+            t.font = theme.skinned ? .rounded(13, .regular) : .systemFont(ofSize: 13, weight: .semibold)
+            t.textColor = theme.textSecondary
             t.translatesAutoresizingMaskIntoConstraints = false
             return t
         }
         func hint(_ s: String) -> NSTextField {
-            let t = NSTextField(wrappingLabelWithString: s)
-            t.font = .systemFont(ofSize: 11)
-            t.textColor = .secondaryLabelColor
+            let t = NSTextField(wrappingLabelWithString: theme.cased(s))
+            t.font = theme.fontCaption
+            t.textColor = theme.textFaint
             t.translatesAutoresizingMaskIntoConstraints = false
             return t
         }
@@ -736,14 +884,12 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         divider2.boxType = .separator
         divider2.translatesAutoresizingMaskIntoConstraints = false
 
-        for sw in [hardcoreSwitch, wormSwitch, lcdSwitch] {
-            sw.controlSize = .small
-            sw.target = self
-            sw.translatesAutoresizingMaskIntoConstraints = false
-        }
-        hardcoreSwitch.action = #selector(hardcoreToggled)
-        wormSwitch.action = #selector(wormToggled)
-        lcdSwitch.action = #selector(lcdToggled)
+        hardcoreSwitch.onToggle = { HardcoreLighting.isEnabled = $0 } // posts .screenEffectsChanged
+        wormSwitch.onToggle = { WormLight.isEnabled = $0 }
+        lcdSwitch.onToggle = { LCDGhosting.isEnabled = $0 }
+        hardcoreSwitch.setAccessibilityName("Hardcore Lighting. Automatically dim the display to ambient light")
+        wormSwitch.setAccessibilityName("Worm Light. A warm clip-on light over the screen")
+        lcdSwitch.setAccessibilityName("T3d LCD Real Feel. Emulates an old LCD's pixel persistence")
 
         for v in [hcTitle, hcHint, wlTitle, wlHint, lcdTitle, lcdHint,
                   divider, divider2, hardcoreSwitch, wormSwitch, lcdSwitch] {
@@ -792,9 +938,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     // Switch states + the art preview, kept in step with the global toggles
     private func syncEffectsUI() {
-        hardcoreSwitch.state = HardcoreLighting.isEnabled ? .on : .off
-        wormSwitch.state = WormLight.isEnabled ? .on : .off
-        lcdSwitch.state = LCDGhosting.isEnabled ? .on : .off
+        hardcoreSwitch.isOn = HardcoreLighting.isEnabled
+        wormSwitch.isOn = WormLight.isEnabled
+        lcdSwitch.isOn = LCDGhosting.isEnabled
         applyArtEffects()
     }
 
@@ -802,18 +948,6 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private func applyArtEffects() {
         let dim = HardcoreLighting.isEnabled ? HardcoreLighting.currentDimOpacity() : 0
         artView.applyEffects(dim: dim, worm: WormLight.isEnabled)
-    }
-
-    @objc private func hardcoreToggled() {
-        HardcoreLighting.isEnabled = (hardcoreSwitch.state == .on) // posts .screenEffectsChanged
-    }
-
-    @objc private func wormToggled() {
-        WormLight.isEnabled = (wormSwitch.state == .on)
-    }
-
-    @objc private func lcdToggled() {
-        LCDGhosting.isEnabled = (lcdSwitch.state == .on)
     }
 
     // Loads both per-system folders from preferences and refreshes the view.
@@ -959,7 +1093,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     /// Re-apply appearance-dependent colours after a dark/light switch (driven from
     /// Preferences ▸ Appearance now that the library no longer hosts the toggle).
     func refreshForAppearance() {
-        refreshFolderBarColor()
+        styleChrome()
     }
 
     // Reflects the active tab's folder, reading as part of that tab
@@ -1013,7 +1147,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         }()
         let rom = roms[row]
         let star = Favourites.isFavourite(rom) ? "★ " : ""
-        cell.nameLabel.stringValue = star + rowTitle(for: rom)
+        cell.nameLabel.stringValue = star + theme.cased(rowTitle(for: rom))
 
         var stats: [String] = []
         let seconds = PlayStats.shared.seconds(for: rom)
@@ -1023,12 +1157,21 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         return cell
     }
 
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let id = NSUserInterfaceItemIdentifier("themedRow")
+        return tableView.makeView(withIdentifier: id, owner: nil) as? ThemedRowView ?? {
+            let v = ThemedRowView(); v.identifier = id; return v
+        }()
+    }
+
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return }
         let rom = roms[tableView.selectedRow]
         lastSelectedPath = rom.path
         UserDefaults.standard.set(rom.path, forKey: Self.lastSelectedKey)
-        titleLabel.stringValue = displayName(rom, stripTags: true)
+        let name = displayName(rom, stripTags: true)
+        titleLabel.stringValue = theme.cased(name)
+        artView.setAccessibilityLabel("Box art for \(name)")
         updateFavButton(for: rom)
         updateStats(for: rom)
         artView.image = nil
@@ -1193,8 +1336,22 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         resumeDrawerIfNeeded()
     }
 
+    private var hasSizedOnce = false
+
     override func showWindow(_ sender: Any?) {
         super.showWindow(sender)
+        // The show path shrinks the window below our themed size (and even below minSize);
+        // force the intended size on first appearance, then leave it to the user.
+        if !hasSizedOnce, let window {
+            hasSizedOnce = true
+            let target = NSSize(width: 880, height: isEngineer ? 740 : 600)
+            window.setContentSize(target)
+            window.center()
+            DispatchQueue.main.async { [weak window] in
+                guard let window, abs(window.frame.width - target.width) > 1 else { return }
+                window.setContentSize(target); window.center()
+            }
+        }
         resumeDrawerIfNeeded() // reopening from the Dock tears down on close; rebuild
     }
 

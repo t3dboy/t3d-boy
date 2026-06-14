@@ -32,6 +32,12 @@ final class PlayStats {
         stats(for: url).seconds
     }
 
+    /// Total seconds played across every ROM and system. Drives the Engineer theme's
+    /// LED minutes read-out, which accumulates as you play.
+    var totalSeconds: Int {
+        Int(entries.values.reduce(0) { $0 + ($1["seconds"] ?? 0) })
+    }
+
     func recordPlay(_ url: URL) {
         var e = entries[url.path] ?? [:]
         e["plays"] = (e["plays"] ?? 0) + 1

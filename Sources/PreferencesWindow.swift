@@ -21,8 +21,8 @@ private final class PrefRow: NSView {
         iconView.image = NSImage(systemSymbolName: symbol, accessibilityDescription: title)?
             .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .medium))
         iconView.translatesAutoresizingMaskIntoConstraints = false
-        label.stringValue = title
-        label.font = .systemFont(ofSize: 13)
+        label.stringValue = theme.cased(title)
+        label.font = theme.fontBody
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(iconView); addSubview(label)
         NSLayoutConstraint.activate([
@@ -43,34 +43,35 @@ private final class PrefRow: NSView {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
 
     private func refresh() {
-        layer?.backgroundColor = isSelected ? NSColor.controlAccentColor.cgColor : NSColor.clear.cgColor
-        label.textColor = isSelected ? .white : .labelColor
-        iconView.contentTintColor = isSelected ? .white : .secondaryLabelColor
+        // Fill the selected row with the accent (not theme.selection, which on some themes —
+        // e.g. Engineer — is a dark "lit-pad" colour that would leave onAccent text
+        // unreadable). onAccent is guaranteed to contrast with the accent.
+        layer?.backgroundColor = isSelected ? theme.accent.cgColor : NSColor.clear.cgColor
+        label.textColor = isSelected ? theme.onAccent : theme.textPrimary
+        iconView.contentTintColor = isSelected ? theme.onAccent : theme.textSecondary
     }
 }
 
 final class PreferencesWindowController: NSWindowController {
     // RetroAchievements
     private let loginForm = RALoginForm()
-    private let hardcoreCheck = NSButton(checkboxWithTitle:
-        "Hardcore mode (no save-state loads, rewind, slow-motion, or cheats)", target: nil, action: nil)
-    private let drawerCheck = NSButton(checkboxWithTitle:
-        "Show the achievements drawer by default", target: nil, action: nil)
-    private let soundCheck = NSButton(checkboxWithTitle:
-        "Play a sound when an achievement unlocks", target: nil, action: nil)
+    private let hardcoreToggle = SettingToggle()
+    private let drawerToggle = SettingToggle()
+    private let soundToggle = SettingToggle()
     private let volumeSlider = NSSlider(value: 0.7, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let cornerPopup = NSPopUpButton()
     private let testButton = NSButton(title: "Test Connection", target: nil, action: nil)
     private let testResult = NSTextField(labelWithString: "")
     // Screen effects
-    private let hcLightingCheck = NSButton(checkboxWithTitle: "Hardcore Lighting", target: nil, action: nil)
-    private let wormCheck = NSButton(checkboxWithTitle: "Worm Light", target: nil, action: nil)
-    private let lcdCheck = NSButton(checkboxWithTitle: "T3d LCD Real Feel™", target: nil, action: nil)
+    private let hcLightingToggle = SettingToggle()
+    private let wormToggle = SettingToggle()
+    private let lcdToggle = SettingToggle()
     // Appearance
-    private let darkModeCheck = NSButton(checkboxWithTitle: "Dark mode", target: nil, action: nil)
-    private let fpsCheck = NSButton(checkboxWithTitle:
-        "Show the FPS counter in the game window", target: nil, action: nil)
+    private var themeRadios: [NSButton] = []
+    private let darkModeToggle = SettingToggle()
+    private let fpsToggle = SettingToggle()
 
+    private var darkModeRow: NSView?
     private let contentArea = NSView()
     private var sections: [(row: PrefRow, content: NSView)] = []
 
@@ -93,6 +94,11 @@ final class PreferencesWindowController: NSWindowController {
 
     private func buildUI() {
         guard let content = window?.contentView else { return }
+        window?.backgroundColor = theme.skinned ? theme.surfaceWindow : .windowBackgroundColor
+        if theme.skinned {
+            content.wantsLayer = true
+            content.layer?.backgroundColor = theme.surfaceWindow.cgColor
+        }
 
         wireControls()
 
@@ -102,17 +108,33 @@ final class PreferencesWindowController: NSWindowController {
 
         let achievementsC = sectionContent(title: "Achievements", items: [
             subheading("Account"), loginForm,
-            subheading("Options"), hardcoreCheck, drawerCheck, testRow,
-            subheading("Notifications"), soundCheck,
+            subheading("Options"),
+            toggleRow("Hardcore mode", hardcoreToggle,
+                      subtitle: "No save-state loads, rewind, slow-motion, or cheats"),
+            toggleRow("Show the achievements drawer by default", drawerToggle),
+            testRow,
+            subheading("Notifications"),
+            toggleRow("Play a sound when an achievement unlocks", soundToggle),
             labeledRow("Unlock volume", volumeSlider),
             labeledRow("Notification position", cornerPopup),
         ])
         let screenC = sectionContent(title: "Screen Effects", items: [
-            effectRow(hcLightingCheck, "Dim the screen to match your room's ambient light, like the non-backlit DMG"),
-            effectRow(wormCheck, "A warm '90s clip-on light shining down over the screen"),
-            effectRow(lcdCheck, "Faithfully emulates an old LCD's pixel persistence"),
+            toggleRow("Hardcore Lighting", hcLightingToggle,
+                      subtitle: "Dim the screen to match your room's ambient light, like the non-backlit DMG"),
+            toggleRow("Worm Light", wormToggle,
+                      subtitle: "A warm '90s clip-on light shining down over the screen"),
+            toggleRow("T3d LCD Real Feel™", lcdToggle,
+                      subtitle: "Faithfully emulates an old LCD's pixel persistence"),
         ])
-        let appearanceC = sectionContent(title: "Appearance", items: [darkModeCheck, fpsCheck])
+        let darkRow = toggleRow("Dark mode", darkModeToggle,
+                                subtitle: theme.forcedAppearance != nil
+                                    ? "\(theme.name) uses its own colour palette" : nil)
+        darkModeRow = darkRow
+        let appearanceC = sectionContent(title: "Appearance", items: [
+            labeledRow("Theme", themeSelector()),
+            darkRow,
+            toggleRow("Show the FPS counter in the game window", fpsToggle),
+        ])
 
         let defs: [(String, String, NSView)] = [
             ("trophy", "Achievements", achievementsC),
@@ -121,10 +143,19 @@ final class PreferencesWindowController: NSWindowController {
         ]
 
         // --- Sidebar ---
-        let sidebar = NSVisualEffectView()
-        sidebar.material = .sidebar
-        sidebar.blendingMode = .behindWindow
-        sidebar.state = .followsWindowActiveState
+        let sidebar: NSView
+        if theme.usesVibrancy {
+            let v = NSVisualEffectView()
+            v.material = theme.sidebarMaterial
+            v.blendingMode = .behindWindow
+            v.state = .followsWindowActiveState
+            sidebar = v
+        } else {
+            let v = NSView()
+            v.wantsLayer = true
+            v.layer?.backgroundColor = theme.surfacePanel.cgColor
+            sidebar = v
+        }
         sidebar.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(sidebar)
 
@@ -167,6 +198,10 @@ final class PreferencesWindowController: NSWindowController {
                 view.topAnchor.constraint(equalTo: contentArea.topAnchor),
                 view.leadingAnchor.constraint(equalTo: contentArea.leadingAnchor),
                 view.trailingAnchor.constraint(equalTo: contentArea.trailingAnchor),
+                // Fill the pane height too — without a bottom the view collapses to ~0
+                // height and its controls, though drawn, fall outside its bounds and
+                // become unclickable (hit-testing respects bounds).
+                view.bottomAnchor.constraint(equalTo: contentArea.bottomAnchor),
             ])
             sections.append((row, view))
         }
@@ -176,24 +211,55 @@ final class PreferencesWindowController: NSWindowController {
     }
 
     private func wireControls() {
-        hardcoreCheck.target = self;  hardcoreCheck.action = #selector(toggleHardcore)
-        drawerCheck.target = self;    drawerCheck.action = #selector(toggleDrawer)
-        soundCheck.target = self;     soundCheck.action = #selector(toggleSound)
+        hardcoreToggle.onToggle = { RASettings.hardcore = $0; Achievements.shared.setHardcore($0) }
+        drawerToggle.onToggle = { RASettings.showDrawerByDefault = $0 }
+        soundToggle.onToggle = { [weak self] in RASettings.unlockSound = $0; self?.refreshControls() }
         volumeSlider.target = self;   volumeSlider.action = #selector(changeVolume)
         volumeSlider.widthAnchor.constraint(equalToConstant: 160).isActive = true
         for corner in ToastCorner.allCases { cornerPopup.addItem(withTitle: corner.label) }
         cornerPopup.target = self;    cornerPopup.action = #selector(changeCorner)
         testButton.bezelStyle = .rounded
         testButton.target = self;     testButton.action = #selector(testConnection)
-        testResult.font = .systemFont(ofSize: 11); testResult.textColor = .secondaryLabelColor
-        hcLightingCheck.target = self; hcLightingCheck.action = #selector(toggleHCLighting)
-        wormCheck.target = self;       wormCheck.action = #selector(toggleWormLight)
-        lcdCheck.target = self;        lcdCheck.action = #selector(toggleLCD)
-        darkModeCheck.target = self;   darkModeCheck.action = #selector(toggleDarkMode)
-        fpsCheck.target = self;        fpsCheck.action = #selector(toggleFPS)
+        testResult.font = theme.fontCaption; testResult.textColor = theme.textSecondary
+        hcLightingToggle.onToggle = { HardcoreLighting.isEnabled = $0 }
+        wormToggle.onToggle = { WormLight.isEnabled = $0 }
+        lcdToggle.onToggle = { LCDGhosting.isEnabled = $0 }
+        darkModeToggle.onToggle = { (NSApp.delegate as? AppDelegate)?.setAppearance(dark: $0) }
+        fpsToggle.onToggle = { RASettings.showFPS = $0 }
     }
 
+    /// Radio-button theme picker (native, reliably clickable). Grouped by shared action.
+    private func themeSelector() -> NSView {
+        themeRadios = ThemeManager.shared.all.enumerated().map { i, t in
+            let b = NSButton(radioButtonWithTitle: theme.cased(t.name),
+                             target: self, action: #selector(themeRadioChanged(_:)))
+            b.tag = i
+            b.font = theme.fontBody
+            b.contentTintColor = theme.textPrimary
+            return b
+        }
+        let stack = NSStackView(views: themeRadios)
+        stack.orientation = .horizontal
+        stack.spacing = 18
+        stack.alignment = .centerY
+        return stack
+    }
+
+    @objc private func themeRadioChanged(_ sender: NSButton) {
+        guard let t = ThemeManager.shared.all[safe: sender.tag] else { return }
+        ThemeManager.shared.select(id: t.id)
+    }
+
+    /// The section currently shown, so a theme switch (which recreates this window)
+    /// can reopen on the same tab instead of jumping back to the first.
+    private(set) var selectedSection = 0
+
+    /// Select a section by index, clamped to the valid range. Public so the app can
+    /// restore the tab after recreating the window.
+    func selectSection(_ index: Int) { select(min(max(0, index), max(0, sections.count - 1))) }
+
     private func select(_ index: Int) {
+        selectedSection = index
         for (i, s) in sections.enumerated() {
             s.row.isSelected = (i == index)
             s.content.isHidden = (i != index)
@@ -203,8 +269,7 @@ final class PreferencesWindowController: NSWindowController {
     // MARK: - Layout helpers
 
     private func sectionContent(title: String, items: [NSView]) -> NSView {
-        let header = NSTextField(labelWithString: title)
-        header.font = .systemFont(ofSize: 20, weight: .bold)
+        let header = ThemedUI.title(title)
         let stack = NSStackView(views: [header] + items)
         stack.orientation = .vertical
         stack.alignment = .leading
@@ -227,93 +292,103 @@ final class PreferencesWindowController: NSWindowController {
 
     // A small all-caps group label used to separate clusters within a section.
     private func subheading(_ text: String) -> NSView {
-        let label = NSTextField(labelWithString: text.uppercased())
-        label.font = .systemFont(ofSize: 11, weight: .semibold)
-        label.textColor = .secondaryLabelColor
-        return label
+        ThemedUI.sectionHeader(text)
     }
 
     private func labeledRow(_ text: String, _ control: NSView) -> NSView {
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 13)
+        let label = NSTextField(labelWithString: theme.cased(text))
+        label.font = theme.fontBody
+        label.textColor = theme.textSecondary
         let row = NSStackView(views: [label, control])
         row.spacing = 10; row.alignment = .centerY
         return row
     }
 
-    // A toggle with a secondary description underneath, indented under its label.
-    private func effectRow(_ check: NSButton, _ subtitle: String) -> NSView {
-        let sub = NSTextField(wrappingLabelWithString: subtitle)
-        sub.font = .systemFont(ofSize: 11)
-        sub.textColor = .secondaryLabelColor
-        sub.translatesAutoresizingMaskIntoConstraints = false
-        sub.preferredMaxLayoutWidth = 380
-        let holder = NSView()
-        holder.translatesAutoresizingMaskIntoConstraints = false
-        holder.addSubview(sub)
-        NSLayoutConstraint.activate([
-            sub.leadingAnchor.constraint(equalTo: holder.leadingAnchor, constant: 20),
-            sub.topAnchor.constraint(equalTo: holder.topAnchor),
-            sub.bottomAnchor.constraint(equalTo: holder.bottomAnchor),
-            sub.trailingAnchor.constraint(lessThanOrEqualTo: holder.trailingAnchor),
-        ])
-        let v = NSStackView(views: [check, holder])
-        v.orientation = .vertical
-        v.alignment = .leading
-        v.spacing = 2
-        return v
+    // A settings row: title on the left, toggle pinned to the right, optional grey
+    // description beneath the title. Fixed width so toggles line up down a section.
+    private func toggleRow(_ title: String, _ toggle: SettingToggle, subtitle: String? = nil) -> NSView {
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        toggle.setAccessibilityName(subtitle.map { "\(title). \($0)" } ?? title)
+        let label = NSTextField(labelWithString: theme.cased(title))
+        label.font = theme.fontBody
+        label.textColor = theme.textSecondary
+        label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
+        toggle.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(label); container.addSubview(toggle)
+
+        var cs = [
+            container.widthAnchor.constraint(equalToConstant: 440),
+            label.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            label.topAnchor.constraint(equalTo: container.topAnchor),
+            toggle.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            toggle.centerYAnchor.constraint(equalTo: label.centerYAnchor),
+            toggle.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 12),
+        ]
+        if let subtitle {
+            let sub = ThemedUI.caption(subtitle)
+            sub.translatesAutoresizingMaskIntoConstraints = false
+            sub.preferredMaxLayoutWidth = 360
+            container.addSubview(sub)
+            cs += [
+                sub.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                sub.topAnchor.constraint(equalTo: label.bottomAnchor, constant: 3),
+                sub.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -12),
+                sub.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ]
+        } else {
+            cs.append(label.bottomAnchor.constraint(equalTo: container.bottomAnchor))
+        }
+        NSLayoutConstraint.activate(cs)
+        return container
     }
 
     // MARK: - State
 
     private func refreshControls() {
         loginForm.refresh()
-        hardcoreCheck.state = RASettings.hardcore ? .on : .off
-        drawerCheck.state = RASettings.showDrawerByDefault ? .on : .off
-        soundCheck.state = RASettings.unlockSound ? .on : .off
+        hardcoreToggle.isOn = RASettings.hardcore
+        drawerToggle.isOn = RASettings.showDrawerByDefault
+        soundToggle.isOn = RASettings.unlockSound
         volumeSlider.doubleValue = RASettings.unlockVolume
         volumeSlider.isEnabled = RASettings.unlockSound
         cornerPopup.selectItem(at: RASettings.toastCorner.rawValue)
-        fpsCheck.state = RASettings.showFPS ? .on : .off
+        fpsToggle.isOn = RASettings.showFPS
+        if let i = ThemeManager.shared.all.firstIndex(where: { $0.id == theme.id }) {
+            for (j, b) in themeRadios.enumerated() { b.state = (j == i) ? .on : .off }
+        }
         refreshEffectControls()
         refreshAppearanceControl()
     }
 
     private func refreshEffectControls() {
-        hcLightingCheck.state = HardcoreLighting.isEnabled ? .on : .off
-        wormCheck.state = WormLight.isEnabled ? .on : .off
-        lcdCheck.state = LCDGhosting.isEnabled ? .on : .off
+        hcLightingToggle.isOn = HardcoreLighting.isEnabled
+        wormToggle.isOn = WormLight.isEnabled
+        lcdToggle.isOn = LCDGhosting.isEnabled
     }
 
-    /// Keep the dark-mode checkbox in step with the app's current appearance.
+    /// Keep the dark-mode toggle in step with the app's current appearance. Skinned
+    /// themes (e.g. Pistachio) define their own palette, so dark mode doesn't apply —
+    /// grey the control out.
     func refreshAppearanceControl() {
-        darkModeCheck.state = (NSApp.delegate as? AppDelegate)?.isDarkMode == true ? .on : .off
+        darkModeToggle.isOn = (NSApp.delegate as? AppDelegate)?.isDarkMode == true
+        let locked = theme.forcedAppearance != nil
+        darkModeToggle.isEnabled = !locked
+        darkModeRow?.alphaValue = locked ? 0.4 : 1
     }
 
     // MARK: - Actions
 
-    @objc private func toggleHardcore() { RASettings.hardcore = (hardcoreCheck.state == .on) }
-    @objc private func toggleDrawer()   { RASettings.showDrawerByDefault = (drawerCheck.state == .on) }
-    @objc private func toggleSound() {
-        RASettings.unlockSound = (soundCheck.state == .on)
-        volumeSlider.isEnabled = RASettings.unlockSound
-    }
     @objc private func changeVolume()   { RASettings.unlockVolume = volumeSlider.doubleValue }
     @objc private func changeCorner() {
         RASettings.toastCorner = ToastCorner(rawValue: cornerPopup.indexOfSelectedItem) ?? .topRight
     }
-    @objc private func toggleHCLighting() { HardcoreLighting.isEnabled = (hcLightingCheck.state == .on) }
-    @objc private func toggleWormLight()  { WormLight.isEnabled = (wormCheck.state == .on) }
-    @objc private func toggleLCD()        { LCDGhosting.isEnabled = (lcdCheck.state == .on) }
-    @objc private func toggleDarkMode() {
-        (NSApp.delegate as? AppDelegate)?.setAppearance(dark: darkModeCheck.state == .on)
-    }
-    @objc private func toggleFPS() { RASettings.showFPS = (fpsCheck.state == .on) }
 
     @objc private func testConnection() {
         testButton.isEnabled = false
         testResult.stringValue = "Checking…"
-        testResult.textColor = .secondaryLabelColor
+        testResult.textColor = theme.textSecondary
         Achievements.shared.testConnection { [weak self] ok in
             guard let self else { return }
             self.testButton.isEnabled = true

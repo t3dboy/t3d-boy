@@ -21,6 +21,48 @@ protocol RATokenStoring {
     func clear()
 }
 
+/// Selects the token backend. In normal use this is the Keychain. During local
+/// development, ad-hoc re-signing changes the binary's identity on every build, so
+/// the Keychain re-prompts for the login password to grant access — which makes
+/// unattended rebuild/relaunch loops impossible. Setting the `T3DBOY_DEV_TOKEN`
+/// environment variable switches to a plain on-disk store that never prompts, so
+/// builds can run while you're away. Never enable this for a shipped build.
+func makeTokenStore() -> RATokenStoring {
+    if ProcessInfo.processInfo.environment["T3DBOY_DEV_TOKEN"] != nil {
+        return FileTokenStore()
+    }
+    return KeychainTokenStore()
+}
+
+/// Dev-only: stores the token as a JSON file under Application Support. No ACL, so
+/// no Keychain password prompt across ad-hoc rebuilds. Lower security than the
+/// Keychain (plaintext token on disk) — gated behind `T3DBOY_DEV_TOKEN`, dev use only.
+struct FileTokenStore: RATokenStoring {
+    private var url: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("T3dBoy", isDirectory: true)
+        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        return base.appendingPathComponent("dev-ra-token.json")
+    }
+
+    func load() -> RACredential? {
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONDecoder().decode(StoredCredential.self, from: data)
+        else { return nil }
+        return RACredential(username: json.username, token: json.token)
+    }
+
+    func save(_ credential: RACredential) {
+        let stored = StoredCredential(username: credential.username, token: credential.token)
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
+
+    func clear() { try? FileManager.default.removeItem(at: url) }
+
+    private struct StoredCredential: Codable { let username: String; let token: String }
+}
+
 /// macOS Keychain-backed implementation (generic password item).
 struct KeychainTokenStore: RATokenStoring {
     private let service = "com.t3dboy.retroachievements"

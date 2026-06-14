@@ -242,7 +242,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         Sounds.playPowerSwitch()
 
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.42
+            ctx.duration = A11y.reduceMotion ? 0 : 0.42
             ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
             window.animator().setFrame(target, display: true)
             dim.animator().alphaValue = 0.6
@@ -263,7 +263,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             : window.frame.insetBy(dx: window.frame.width * 0.42, dy: window.frame.height * 0.42)
         Sounds.playPowerSwitch()
         NSAnimationContext.runAnimationGroup({ ctx in
-            ctx.duration = 0.3
+            ctx.duration = A11y.reduceMotion ? 0 : 0.3
             ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
             window.animator().setFrame(back, display: true)
             window.animator().alphaValue = 0

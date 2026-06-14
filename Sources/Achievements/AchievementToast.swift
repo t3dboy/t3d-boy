@@ -139,6 +139,19 @@ final class AchievementToastController {
         current = toast
         toast.present()
         playUnlockSoundIfWanted(for: kind)
+        announce(kind)
+    }
+
+    /// Mirror the toast to VoiceOver so it's not a purely visual notification.
+    private func announce(_ kind: ToastKind) {
+        let message: String
+        switch kind {
+        case let .unlock(_, title, points, _, _): message = "Achievement unlocked: \(title), \(points) points"
+        case let .mastery(title, _, _):           message = "Game mastered: \(title)"
+        case let .leaderboardSubmit(title, value): message = "Leaderboard \(title): \(value)"
+        default: return
+        }
+        A11y.announce(message)
     }
 
     /// Achievement unlocks (and masteries) play a chime when the user enables it.
@@ -309,11 +322,11 @@ private final class ToastContentView: NSView {
     private var accent: NSColor {
         switch kind {
         case let .unlock(_, _, _, _, hardcore):
-            return hardcore ? NSColor.systemOrange : NSColor.controlAccentColor
+            return hardcore ? theme.warm : theme.accent
         case let .mastery(_, hardcore, _):
-            return hardcore ? NSColor.systemOrange : NSColor.systemYellow
+            return hardcore ? theme.warm : theme.star
         case .leaderboardStart, .leaderboardSubmit:
-            return NSColor.systemTeal
+            return theme.cool
         case .leaderboardCancel:
             return NSColor.systemGray
         }
@@ -327,18 +340,17 @@ private final class ToastContentView: NSView {
         addSubview(rail)
 
         let kicker = NSTextField(labelWithString: kickerText())
-        kicker.font = .systemFont(ofSize: 10, weight: .bold)
+        kicker.font = uiFont(10, .bold)
         kicker.textColor = accent
         kicker.translatesAutoresizingMaskIntoConstraints = false
 
         let titleField = NSTextField(labelWithString: titleText())
-        titleField.font = .systemFont(ofSize: isMastery ? 15 : 13,
-                                      weight: isMastery ? .bold : .semibold)
+        titleField.font = uiFont(isMastery ? 15 : 13, isMastery ? .bold : .semibold)
         titleField.lineBreakMode = .byTruncatingTail
         titleField.translatesAutoresizingMaskIntoConstraints = false
 
         let subtitle = NSTextField(labelWithString: subtitleText())
-        subtitle.font = .systemFont(ofSize: 11)
+        subtitle.font = uiFont(11)
         subtitle.textColor = .secondaryLabelColor
         subtitle.lineBreakMode = .byTruncatingTail
         subtitle.translatesAutoresizingMaskIntoConstraints = false
@@ -457,7 +469,7 @@ private final class ToastContentView: NSView {
 
     private func refreshColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            let base = NSColor.windowBackgroundColor
+            let base = theme.surfacePanel
             let bg = hovered ? (base.blended(withFraction: 0.06, of: accent) ?? base) : base
             layer?.backgroundColor = bg.cgColor
             layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.10).cgColor

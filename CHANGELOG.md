@@ -2,19 +2,43 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
-## [1.3.1] — 2026-06-14
+## [2.0.0] — 2026-06-14
+
+A major release built around **themes** and a top-to-bottom **accessibility** pass.
+
+### Added
+- **Themes** — three complete looks, switchable live in Preferences ▸ Appearance ▸ Theme:
+  - **Classic** — the clean, system-native macOS look (light or dark).
+  - **Pistachio** *(default)* — a warm soft-dark skin with rounded type, coral accents
+    and a pistachio palette.
+  - **Engineer** — a boutique-synth-style hardware look: a sandblasted light-grey
+    "device" body with orange rubber keys, red-LED read-outs, monospaced uppercase type,
+    a drilled speaker grille, hex screws and katakana labels. Includes a live LED counter
+    of your **total minutes played** across every game. (Light-only by design.)
+  - See [docs/themes section of the user guide](docs/user-guide.md#themes).
+- **Accessibility** — the app is now usable without a mouse or without sight:
+  - **VoiceOver** — every control announces its name, role and state, and can be
+    activated by a screen-reader user; achievement unlocks are spoken.
+  - **Full keyboard navigation** — Tab to any control, a focus ring shows where you are,
+    and Space/Return/arrows operate it.
+  - **Reduce Motion** — the launch/exit animations snap instead of zooming when the
+    system setting is on.
+  - See [docs/accessibility.md](docs/accessibility.md).
 
 ### Changed
-- **Preferences redesigned** — the single scrolling panel is now a sidebar window,
-  grouped into Achievements (account, options, and notifications), Screen Effects,
-  and Appearance, so the growing list of settings is easier to navigate. The lighting
-  and display effects now sit together with a one‑line description under each.
+- **Preferences redesigned** — a System Settings-style sidebar window grouped into
+  Achievements (account, options, notifications), Screen Effects, and Appearance.
+  Checkboxes are now toggle switches that match the rest of the UI.
+- The **achievements drawer's "Sign in" prompt** now opens the in-app login
+  (Preferences ▸ Achievements) instead of the RetroAchievements website.
 
 ### Fixed
 - **RetroAchievements hardcore integrity** — switching a game from softcore to
-  hardcore mid‑session now resets the game, so a run can't be promoted to hardcore
-  after progress was already made with softcore conveniences. Every request to the
-  RetroAchievements server now also carries a proper, versioned client identifier.
+  hardcore mid-session now resets the game, so a run can't be promoted to hardcore
+  after progress was made with softcore conveniences. Every server request now also
+  carries a proper, versioned client identifier.
+- Selected ROM-list rows and sidebar items stay legible on every theme, even when the
+  window isn't focused.
 
 ## [1.3.0] — 2026-06-14
 
