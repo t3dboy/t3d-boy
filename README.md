@@ -14,6 +14,9 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   - **Engineer** — a boutique-synth-style hardware look: a light-grey "device" body
     with orange rubber keys, red-LED read-outs, a drilled speaker grille, hex screws, and
     a live LED counter of your total play time.
+
+  ![The Engineer theme](tools/screenshot-engineer.png)
+
 - **Full Game Boy (DMG) and Game Boy Color emulation** — SM83 CPU, scanline PPU, timers,
   interrupts, OAM/HDMA DMA, MBC1/2/3/5 cartridges, double-speed mode, and all four audio
   channels via a cycle-stepped APU
