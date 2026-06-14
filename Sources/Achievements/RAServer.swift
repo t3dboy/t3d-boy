@@ -22,8 +22,11 @@ enum RAServer {
     /// The rc_client server_call callback. Non-capturing → C function pointer.
     static let callback: rc_client_server_call_t = { request, callback, callbackData, _ in
         guard let request, let url = request.pointee.url,
-              let nsURL = URL(string: String(cString: url)) else {
-            // Hand rcheevos a synthetic client-error so it can fail cleanly.
+              let nsURL = URL(string: String(cString: url)),
+              nsURL.scheme?.lowercased() == "https" else {
+            // Reject anything that isn't HTTPS, and hand rcheevos a synthetic
+            // client-error so it can fail cleanly. Credentials must never leave
+            // over cleartext, even if the host were ever reconfigured.
             RAServer.deliverError(callback, callbackData, status: Int32(RC_API_SERVER_RESPONSE_CLIENT_ERROR))
             return
         }

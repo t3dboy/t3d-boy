@@ -183,7 +183,7 @@ final class Achievements {
         let contentType = apiReq.content_type.map { String(cString: $0) }
         rc_api_destroy_request(&apiReq)
 
-        guard let url = URL(string: urlStr) else {
+        guard let url = URL(string: urlStr), url.scheme?.lowercased() == "https" else {
             gameState.identification = .unrecognised
             rebuildState()
             return
@@ -275,7 +275,8 @@ final class Achievements {
             return rc_api_init_resolve_hash_request(&apiReq, &params)
         }
         guard initOK == RC_OK, let urlPtr = apiReq.url,
-              let url = URL(string: String(cString: urlPtr)) else {
+              let url = URL(string: String(cString: urlPtr)),
+              url.scheme?.lowercased() == "https" else {
             rc_api_destroy_request(&apiReq)
             DispatchQueue.main.async { completion(false) }
             return

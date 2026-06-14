@@ -28,8 +28,19 @@ if [ ! -f "$RCLIB" ]; then
     rm -rf build/rcobj
 fi
 
+# Local dev builds opt in with T3DBOY_DEV_BUILD=1, which compiles in the insecure
+# plaintext token store (gated again at runtime by T3DBOY_DEV_TOKEN) so unattended
+# rebuild loops don't hit the Keychain prompt. A normal/release build omits -D DEV,
+# so the dev store isn't in the binary at all.
+DEVFLAG=()
+if [ "${T3DBOY_DEV_BUILD:-}" = "1" ]; then
+    echo "== DEV build: plaintext dev token store ENABLED (do not ship) =="
+    DEVFLAG=(-D DEV)
+fi
+
 echo "== Compiling T3d Boy ${VERSION} =="
 xcrun swiftc -O -swift-version 5 -o "$APP/Contents/MacOS/T3d Boy" \
+    ${DEVFLAG[@]+"${DEVFLAG[@]}"} \
     $(find Sources -name '*.swift') \
     -framework Cocoa -framework AVFoundation -framework GameController \
     -Xcc -fmodule-map-file="$RC/include/module.modulemap" -Xcc -I"$RC/include" \
@@ -61,8 +72,12 @@ for s in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
-echo "== Signing (ad-hoc) =="
-codesign --force --sign - "$APP"
+echo "== Signing (ad-hoc, hardened runtime) =="
+# Hardened runtime hardens the process against debugger attach / memory scraping
+# (which matters because the RA password/token live in process memory transiently)
+# and is a prerequisite for notarization. Ad-hoc signing supports it; for a public
+# release, re-sign with a Developer ID identity and notarize.
+codesign --force --options runtime --sign - "$APP"
 
 # Re-register the freshly built bundle with LaunchServices so the Dock and Finder
 # pick up the current icon instead of a stale cached one. Rebuilding an unsigned

@@ -2,6 +2,21 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [2.1.1] — 2026-06-14
+
+A security-hardening release focused on RetroAchievements sign-in and credential storage.
+
+### Security
+- Your saved RetroAchievements login token is now **device-bound** — it never syncs to
+  iCloud Keychain or moves to another device through a backup. (You'll be asked to sign
+  in once more after updating.)
+- **All RetroAchievements traffic is enforced HTTPS-only** at the app level, so
+  credentials can never travel over an unencrypted connection.
+- The app now ships with the **hardened runtime**, protecting the running app against
+  memory inspection by other processes.
+- The development-only plaintext-token path is no longer compiled into release builds at
+  all.
+
 ## [2.1.0] — 2026-06-14
 
 ### Added

@@ -28,15 +28,23 @@ protocol RATokenStoring {
 /// environment variable switches to a plain on-disk store that never prompts, so
 /// builds can run while you're away. Never enable this for a shipped build.
 func makeTokenStore() -> RATokenStoring {
+    // The plaintext dev store is compiled in ONLY for local dev builds (build.sh
+    // passes `-D DEV` when T3DBOY_DEV_BUILD=1). A shipped/release binary has no
+    // FileTokenStore at all, so an errant `T3DBOY_DEV_TOKEN` in someone's
+    // environment can never downgrade token storage to plaintext on disk.
+    #if DEV
     if ProcessInfo.processInfo.environment["T3DBOY_DEV_TOKEN"] != nil {
         return FileTokenStore()
     }
+    #endif
     return KeychainTokenStore()
 }
 
+#if DEV
 /// Dev-only: stores the token as a JSON file under Application Support. No ACL, so
 /// no Keychain password prompt across ad-hoc rebuilds. Lower security than the
-/// Keychain (plaintext token on disk) — gated behind `T3DBOY_DEV_TOKEN`, dev use only.
+/// Keychain (plaintext token on disk) — gated behind `T3DBOY_DEV_TOKEN` AND only
+/// compiled into `-D DEV` builds. Never present in a release binary.
 struct FileTokenStore: RATokenStoring {
     private var url: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -55,13 +63,17 @@ struct FileTokenStore: RATokenStoring {
     func save(_ credential: RACredential) {
         let stored = StoredCredential(username: credential.username, token: credential.token)
         guard let data = try? JSONEncoder().encode(stored) else { return }
-        try? data.write(to: url, options: .atomic)
+        // Owner-only perms even though this is dev-only — keep the token off other
+        // accounts' eyes if Application Support is ever on a shared volume.
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     func clear() { try? FileManager.default.removeItem(at: url) }
 
     private struct StoredCredential: Codable { let username: String; let token: String }
 }
+#endif
 
 /// macOS Keychain-backed implementation (generic password item).
 struct KeychainTokenStore: RATokenStoring {
@@ -90,7 +102,9 @@ struct KeychainTokenStore: RATokenStoring {
 
         var add = baseQuery()
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+        // Device-bound: never sync to iCloud Keychain and never restore to another
+        // device via an encrypted backup. A login token should not roam.
+        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         SecItemAdd(add as CFDictionary, nil)
     }
 

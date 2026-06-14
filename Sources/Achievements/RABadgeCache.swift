@@ -73,8 +73,9 @@ final class RABadgeCache {
                 return
             }
 
-            // 2) Network.
-            guard let remote = URL(string: url) else {
+            // 2) Network. HTTPS only — badge art comes from the RA media host over
+            // TLS; refuse to fetch over cleartext even if handed an http URL.
+            guard let remote = URL(string: url), remote.scheme?.lowercased() == "https" else {
                 self.finish(url: url, image: nil)
                 return
             }
