@@ -128,6 +128,22 @@ enum WormLight {
     }
 }
 
+// T3d LCD Real Feel™ — recreates an old LCD's pixel persistence by blending each
+// frame with the previous one. Many Game Boy games faked transparency/extra shades
+// by flickering pixels on alternate frames, trusting the slow DMG screen to blend
+// them; on a crisp emulated display that reads as harsh flicker, so we blend it back.
+enum LCDGhosting {
+    private static let key = "lcdGhosting"
+
+    static var isEnabled: Bool {
+        get { UserDefaults.standard.object(forKey: key) as? Bool ?? true } // on by default
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+            NotificationCenter.default.post(name: .screenEffectsChanged, object: nil)
+        }
+    }
+}
+
 // A single multiplicative "light map" over the host layer (emulator view or
 // library art view). visible = pixels × light, where light = ambient (lowered
 // by Hardcore) plus the warm worm-light pool. Multiply can't exceed the pixel,

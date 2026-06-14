@@ -107,8 +107,11 @@ final class DrawerHandle: NSView {
             owner: self, userInfo: nil))
     }
 
-    override func mouseEntered(with event: NSEvent) { hovered = true; refreshColors() }
-    override func mouseExited(with event: NSEvent) { hovered = false; refreshColors() }
+    /// Reports hover so a host can keep auto-hiding chrome revealed while aimed at.
+    var onHoverChange: ((Bool) -> Void)?
+
+    override func mouseEntered(with event: NSEvent) { hovered = true; refreshColors(); onHoverChange?(true) }
+    override func mouseExited(with event: NSEvent) { hovered = false; refreshColors(); onHoverChange?(false) }
 
     override func mouseDown(with event: NSEvent) { /* swallow; act on up */ }
 

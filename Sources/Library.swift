@@ -453,6 +453,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let effectsHousing = NSView()
     private let hardcoreSwitch = NSSwitch()
     private let wormSwitch = NSSwitch()
+    private let lcdSwitch = NSSwitch()
     private var effectsTimer: Timer?
 
     // Achievements drawer: tucked off the right edge, popped out via the handle to
@@ -466,7 +467,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private var previewedURL: URL?
     private var raIdleTimer: Timer?
 
-    var onPlay: ((URL) -> Void)?
+    var onPlay: ((URL, NSRect) -> Void)?
 
     init() {
         let window = NSWindow(
@@ -726,19 +727,26 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         let hcHint = hint("Automatically dim the T3d Boy display based on ambient lighting")
         let wlTitle = title("Worm Light")
         let wlHint = hint("Shine a warm ’90s clip-on light down over the screen")
+        let lcdTitle = title("T3d LCD Real Feel™")
+        let lcdHint = hint("Faithfully emulates an old LCD's pixel persistence")
         let divider = NSBox()
         divider.boxType = .separator
         divider.translatesAutoresizingMaskIntoConstraints = false
+        let divider2 = NSBox()
+        divider2.boxType = .separator
+        divider2.translatesAutoresizingMaskIntoConstraints = false
 
-        for sw in [hardcoreSwitch, wormSwitch] {
+        for sw in [hardcoreSwitch, wormSwitch, lcdSwitch] {
             sw.controlSize = .small
             sw.target = self
             sw.translatesAutoresizingMaskIntoConstraints = false
         }
         hardcoreSwitch.action = #selector(hardcoreToggled)
         wormSwitch.action = #selector(wormToggled)
+        lcdSwitch.action = #selector(lcdToggled)
 
-        for v in [hcTitle, hcHint, wlTitle, wlHint, divider, hardcoreSwitch, wormSwitch] {
+        for v in [hcTitle, hcHint, wlTitle, wlHint, lcdTitle, lcdHint,
+                  divider, divider2, hardcoreSwitch, wormSwitch, lcdSwitch] {
             effectsHousing.addSubview(v)
         }
         let pad: CGFloat = 12
@@ -764,7 +772,20 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             wlHint.topAnchor.constraint(equalTo: wlTitle.bottomAnchor, constant: 3),
             wlHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
             wlHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
-            wlHint.bottomAnchor.constraint(equalTo: effectsHousing.bottomAnchor, constant: -11),
+
+            divider2.topAnchor.constraint(equalTo: wlHint.bottomAnchor, constant: 11),
+            divider2.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            divider2.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            lcdTitle.topAnchor.constraint(equalTo: divider2.bottomAnchor, constant: 11),
+            lcdTitle.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            lcdSwitch.centerYAnchor.constraint(equalTo: lcdTitle.centerYAnchor),
+            lcdSwitch.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+
+            lcdHint.topAnchor.constraint(equalTo: lcdTitle.bottomAnchor, constant: 3),
+            lcdHint.leadingAnchor.constraint(equalTo: effectsHousing.leadingAnchor, constant: pad),
+            lcdHint.trailingAnchor.constraint(equalTo: effectsHousing.trailingAnchor, constant: -pad),
+            lcdHint.bottomAnchor.constraint(equalTo: effectsHousing.bottomAnchor, constant: -11),
         ])
         syncEffectsUI()
     }
@@ -773,6 +794,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private func syncEffectsUI() {
         hardcoreSwitch.state = HardcoreLighting.isEnabled ? .on : .off
         wormSwitch.state = WormLight.isEnabled ? .on : .off
+        lcdSwitch.state = LCDGhosting.isEnabled ? .on : .off
         applyArtEffects()
     }
 
@@ -788,6 +810,10 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     @objc private func wormToggled() {
         WormLight.isEnabled = (wormSwitch.state == .on)
+    }
+
+    @objc private func lcdToggled() {
+        LCDGhosting.isEnabled = (lcdSwitch.state == .on)
     }
 
     // Loads both per-system folders from preferences and refreshes the view.
@@ -1020,7 +1046,14 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     @objc private func playSelected() {
         guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return }
-        onPlay?(roms[tableView.selectedRow])
+        onPlay?(roms[tableView.selectedRow], artScreenRect())
+    }
+
+    /// The box-art view's rect in screen coordinates, so the game can zoom out of it.
+    private func artScreenRect() -> NSRect {
+        guard let window, !artView.isHidden else { return .zero }
+        let inWindow = artView.convert(artView.bounds, to: nil)
+        return window.convertToScreen(inWindow)
     }
 
     @objc private func changeCurrentFolder() {

@@ -7,6 +7,7 @@ import CryptoKit
 
 final class EmulatorView: NSView {
     var joypad: Joypad?
+    var onMouseMoved: (() -> Void)?   // host reveals the auto-hiding control bar
 
     // Hardcore dim + Worm Light overlays — confined to THIS view (the Game Boy
     // screen), never the rest of the display. The worm-light *angle* is adjusted
@@ -19,7 +20,10 @@ final class EmulatorView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.magnificationFilter = .nearest
-        layer?.backgroundColor = NSColor(srgbRed: 0.61, green: 0.74, blue: 0.06, alpha: 1).cgColor
+        // Scale the framebuffer to fit the view (pixel-perfect, aspect-preserved) so
+        // the screen can grow to the focused play size, zoom, and go fullscreen.
+        layer?.contentsGravity = .resizeAspect
+        layer?.backgroundColor = NSColor.black.cgColor
         effects = ScreenEffects(host: layer!)
         effects.layout(bounds)
     }
@@ -30,12 +34,37 @@ final class EmulatorView: NSView {
         effects.layout(bounds)
     }
 
+    private var tracking: NSTrackingArea?
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let t = tracking { removeTrackingArea(t) }
+        let t = NSTrackingArea(rect: bounds,
+                               options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                               owner: self)
+        addTrackingArea(t); tracking = t
+    }
+    override func mouseMoved(with event: NSEvent) { onMouseMoved?() }
+
     func applyEffects(dim: Float, worm: Bool) {
         effects.apply(dimOpacity: dim, wormOn: worm)
     }
 
+    private var previousFrame: [UInt32]?
+
     func present(_ framebuffer: [UInt32]) {
-        layer?.contents = makeImage(from: framebuffer)
+        // T3d LCD Real Feel: blend with the previous frame so flicker-based effects
+        // resolve to a steady ~50% (per-byte average, no cross-channel overflow).
+        if LCDGhosting.isEnabled, let prev = previousFrame, prev.count == framebuffer.count {
+            var blended = [UInt32](repeating: 0, count: framebuffer.count)
+            for i in 0 ..< framebuffer.count {
+                let a = framebuffer[i], b = prev[i]
+                blended[i] = (a & b) &+ (((a ^ b) >> 1) & 0x7F7F_7F7F)
+            }
+            layer?.contents = makeImage(from: blended)
+        } else {
+            layer?.contents = makeImage(from: framebuffer)
+        }
+        previousFrame = framebuffer
     }
 
     override func keyDown(with event: NSEvent) {
@@ -86,44 +115,61 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     private var framesSinceFlush = 0
     private var hardcoreFrameCounter = 0
     private let rom: [UInt8]
+    private let sourceRect: NSRect?   // box-art screen rect to zoom out of, if any
+    private var dimWindow: NSWindow?  // dims everything behind the focused game
     // Achievements drawer (slides out to the right; widens the window)
     private let drawer = AchievementsDrawer()
     private let handle = DrawerHandle()
     private var drawerOpen = false
-    private let screenWidth: CGFloat = 160 * 4
+    private let screenWidth: CGFloat = 160 * 5   // focused play size (5×), screen scales to fit
     private let drawerWidth: CGFloat = 360
+    private var drawerWidthConstraint: NSLayoutConstraint!
     // Optional FPS counter (with a mini T3d) in the screen's top-right corner.
     private let fpsOverlay = NSView()
     private let fpsMascot = MascotView(frame: .zero)
     private let fpsLabel = NSTextField(labelWithString: "–")
     private var fpsFrames = 0
     private var fpsClock = Date()
+    // Auto-hiding in-game control bar (lighting / full screen / exit).
+    private let controlBar = GameControlBar()
+    private var controlsHideTimer: Timer?
+    private var hoveringControls = false
     var onClose: (() -> Void)?
 
-    init(rom: [UInt8], title: String, url: URL) {
+    init(rom: [UInt8], title: String, url: URL, sourceRect: NSRect? = nil) {
         gb = GameBoy(rom: rom)
         self.rom = rom
+        self.sourceRect = sourceRect
         romURL = url
         baseTitle = "T3d Boy — \(title)"
         romHash = Insecure.MD5.hash(data: Data(rom))
             .map { String(format: "%02x", $0) }.joined()
 
-        let scale: CGFloat = 4
-        let rect = NSRect(x: 0, y: 0, width: 160 * scale, height: 144 * scale)
+        let rect = NSRect(x: 0, y: 0, width: 160 * 5, height: 144 * 5) // focused play size
         emulatorView = EmulatorView(frame: rect)
 
         let container = NSView(frame: rect)
         let window = NSWindow(
             contentRect: rect,
-            styleMask: [.titled, .closable, .miniaturizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.title = baseTitle
+        // Clean, chrome-free focus view: no visible title bar or traffic lights —
+        // the in-game control bar provides Exit / Full Screen instead.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
+        window.backgroundColor = .black
+        window.collectionBehavior.insert(.fullScreenPrimary)
+        window.acceptsMouseMovedEvents = true // reveal the control bar on movement
+        for b in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(b)?.isHidden = true
+        }
         window.contentView = container
         super.init(window: window)
 
         setUpContent(container)
         window.delegate = self
-        window.center()
         emulatorView.joypad = gb.mmu.joypad
 
         PlayStats.shared.recordPlay(url)
@@ -134,17 +180,90 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         // Toggling either effect (from any window or the menu) updates this window
         NotificationCenter.default.addObserver(
             forName: .screenEffectsChanged, object: nil, queue: .main
-        ) { [weak self] _ in self?.applyEffects() }
+        ) { [weak self] _ in
+            self?.applyEffects()
+            self?.controlBar.refreshStates()
+        }
     }
+
+    func windowDidEnterFullScreen(_ notification: Notification) { controlBar.setFullScreen(true) }
+    func windowDidExitFullScreen(_ notification: Notification) { controlBar.setFullScreen(false) }
     required init?(coder: NSCoder) { fatalError() }
 
-    override func showWindow(_ sender: Any?) {
-        super.showWindow(sender)
-        window?.makeFirstResponder(emulatorView)
-        // Hidden by default; only auto-open when the user opts in via Preferences.
-        if RASettings.showDrawerByDefault && !drawerOpen {
-            setDrawer(open: true, animated: false)
+    // MARK: - Launch / exit choreography
+
+    /// Power on: appear at the box-art's spot, click the switch, then expand to the
+    /// focused play size while everything behind dims. Replaces a plain showWindow.
+    func launch() {
+        guard let window else { return }
+        window.makeFirstResponder(emulatorView)
+        let target = centeredFocusedFrame()
+
+        let dim = makeDimWindow()
+        dimWindow = dim
+        // Start from the box art if we have it, else a small centred seed.
+        let start = (sourceRect?.width ?? 0) > 4
+            ? sourceRect!
+            : target.insetBy(dx: target.width * 0.42, dy: target.height * 0.42)
+        window.setFrame(start, display: false)
+
+        dim.alphaValue = 0
+        dim.orderFront(nil)
+        window.makeKeyAndOrderFront(nil)
+        dim.order(.below, relativeTo: window.windowNumber)
+        Sounds.playPowerSwitch()
+
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.42
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().setFrame(target, display: true)
+            dim.animator().alphaValue = 0.6
+        }, completionHandler: { [weak self] in
+            guard let self else { return }
+            self.revealControls() // flash the controls so the player knows they're there
+            if RASettings.showDrawerByDefault && !self.drawerOpen {
+                self.setDrawer(open: true, animated: true)
+            }
+        })
+    }
+
+    /// Power off: shrink back toward the box art while the dim fades, then close.
+    func exitFocus() {
+        guard let window else { close(); return }
+        let back = (sourceRect?.width ?? 0) > 4
+            ? sourceRect!
+            : window.frame.insetBy(dx: window.frame.width * 0.42, dy: window.frame.height * 0.42)
+        Sounds.playPowerSwitch()
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = 0.3
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().setFrame(back, display: true)
+            window.animator().alphaValue = 0
+            dimWindow?.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            self?.close()
+        })
+    }
+
+    private func centeredFocusedFrame() -> NSRect {
+        guard let window, let screen = window.screen ?? NSScreen.main else {
+            return window?.frame ?? .zero
         }
+        var f = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: screenWidth, height: screenHeight))
+        f.origin.x = screen.visibleFrame.midX - f.width / 2
+        f.origin.y = screen.visibleFrame.midY - f.height / 2
+        return f
+    }
+
+    private func makeDimWindow() -> NSWindow {
+        let union = NSScreen.screens.reduce(NSRect.zero) { $0.union($1.frame) }
+        let w = NSWindow(contentRect: union, styleMask: .borderless, backing: .buffered, defer: false)
+        w.isOpaque = false
+        w.backgroundColor = .black
+        w.alphaValue = 0
+        w.hasShadow = false
+        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        return w
     }
 
     // MARK: - Achievements drawer hosting
@@ -154,23 +273,85 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             v.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(v)
         }
+        drawer.wantsLayer = true
+        drawer.layer?.masksToBounds = true // clip cleanly when collapsed
         NSLayoutConstraint.activate([
-            // Emulator viewport — fixed 4× size, pinned left; pixel-perfect, untouched.
+            // Emulator fills the screen area (left of the drawer); scales to fit.
             emulatorView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             emulatorView.topAnchor.constraint(equalTo: container.topAnchor),
             emulatorView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            emulatorView.widthAnchor.constraint(equalToConstant: screenWidth),
-            // Drawer to the right of the viewport (off-screen until the window widens).
-            drawer.leadingAnchor.constraint(equalTo: emulatorView.trailingAnchor),
+            emulatorView.trailingAnchor.constraint(equalTo: drawer.leadingAnchor),
+            // Drawer fills the space to the right; 0-wide when closed.
+            drawer.trailingAnchor.constraint(equalTo: container.trailingAnchor),
             drawer.topAnchor.constraint(equalTo: container.topAnchor),
             drawer.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-            drawer.widthAnchor.constraint(equalToConstant: drawerWidth),
-            // Chevron tab on the viewport's right edge.
+            // Chevron tab on the screen's right edge.
             handle.trailingAnchor.constraint(equalTo: emulatorView.trailingAnchor, constant: -2),
             handle.centerYAnchor.constraint(equalTo: emulatorView.centerYAnchor),
         ])
+        drawerWidthConstraint = drawer.widthAnchor.constraint(equalToConstant: 0)
+        drawerWidthConstraint.isActive = true
         handle.onToggle = { [weak self] in self?.toggleDrawer() }
         setUpFPSOverlay(in: container)
+        setUpControlBar(in: container)
+    }
+
+    private func setUpControlBar(in container: NSView) {
+        controlBar.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.alphaValue = 0
+        controlBar.isHidden = true
+        container.addSubview(controlBar)
+        NSLayoutConstraint.activate([
+            controlBar.centerXAnchor.constraint(equalTo: emulatorView.centerXAnchor),
+            controlBar.bottomAnchor.constraint(equalTo: emulatorView.bottomAnchor, constant: -16),
+        ])
+        controlBar.onToggleHardcore = { HardcoreLighting.isEnabled.toggle() }
+        controlBar.onToggleWorm = { WormLight.isEnabled.toggle() }
+        controlBar.onFullScreen = { [weak self] in self?.window?.toggleFullScreen(nil) }
+        controlBar.onExit = { [weak self] in self?.exitFocus() }
+        let hoverHandler: (Bool) -> Void = { [weak self] hovering in
+            guard let self else { return }
+            self.hoveringControls = hovering
+            if hovering { self.controlsHideTimer?.invalidate(); self.revealControls() }
+            else { self.scheduleHideControls() }
+        }
+        controlBar.onHoverChange = hoverHandler
+        handle.onHoverChange = hoverHandler
+        emulatorView.onMouseMoved = { [weak self] in self?.revealControls() }
+
+        // The drawer reveal handle auto-hides with the rest of the chrome.
+        handle.alphaValue = 0
+        handle.isHidden = true
+    }
+
+    // The handle stays put while the drawer is open (it's the close affordance);
+    // otherwise it hides with the control bar.
+    private func revealControls() {
+        controlBar.isHidden = false
+        handle.isHidden = false
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.15
+            controlBar.animator().alphaValue = 1
+            handle.animator().alphaValue = 1
+        }
+        scheduleHideControls()
+    }
+
+    private func scheduleHideControls() {
+        controlsHideTimer?.invalidate()
+        guard !hoveringControls else { return }
+        controlsHideTimer = Timer.scheduledTimer(withTimeInterval: 2.6, repeats: false) { [weak self] _ in
+            guard let self, !self.hoveringControls else { return }
+            NSAnimationContext.runAnimationGroup({ ctx in
+                ctx.duration = 0.4
+                self.controlBar.animator().alphaValue = 0
+                if !self.drawerOpen { self.handle.animator().alphaValue = 0 }
+            }, completionHandler: { [weak self] in
+                guard let self else { return }
+                if self.controlBar.alphaValue < 0.05 { self.controlBar.isHidden = true }
+                if !self.drawerOpen, self.handle.alphaValue < 0.05 { self.handle.isHidden = true }
+            })
+        }
     }
 
     // Small FPS readout pinned to the screen's top-right: a mini blinking T3d next
@@ -213,22 +394,31 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     @objc func toggleDrawer() { setDrawer(open: !drawerOpen, animated: true) }
 
     private func setDrawer(open: Bool, animated: Bool) {
-        guard let window else { return }
+        guard open != drawerOpen, let window else { return }
         drawerOpen = open
         handle.isExpanded = open
+        if open { // pin the handle visible while the panel is open (it's the close button)
+            controlsHideTimer?.invalidate()
+            handle.isHidden = false
+            handle.alphaValue = 1
+        } else {
+            scheduleHideControls() // collapsed → rejoin the auto-hide cycle
+        }
 
-        let contentW = screenWidth + (open ? drawerWidth : 0)
-        let targetFrame = window.frameRect(
-            forContentRect: NSRect(x: 0, y: 0, width: contentW, height: screenHeight))
         var f = window.frame
-        f.size.width = targetFrame.size.width // grow rightward; top-left stays put
+        f.size.width += open ? drawerWidth : -drawerWidth // grow/shrink rightward
+        if open, let vis = window.screen?.visibleFrame, f.maxX > vis.maxX {
+            f.origin.x = max(vis.minX, vis.maxX - f.size.width) // slide left to stay on-screen
+        }
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                drawerWidthConstraint.animator().constant = open ? drawerWidth : 0
                 window.animator().setFrame(f, display: true)
             }
         } else {
+            drawerWidthConstraint.constant = open ? drawerWidth : 0
             window.setFrame(f, display: true)
         }
     }
@@ -240,7 +430,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         drawer.focus(onAchievement: id)
     }
 
-    private var screenHeight: CGFloat { 144 * 4 }
+    private var screenHeight: CGFloat { 144 * 5 }
 
     private func startTimer() {
         sessionStart = Date()
@@ -340,6 +530,8 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
     }
 
     func windowWillClose(_ notification: Notification) {
+        dimWindow?.orderOut(nil)
+        dimWindow = nil
         flushPlaytime(stop: true)
         frameTimer?.invalidate()
         frameTimer = nil

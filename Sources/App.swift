@@ -66,7 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showLibrary() {
         if library == nil {
             let lib = LibraryWindowController()
-            lib.onPlay = { [weak self] url in self?.play(url: url) }
+            lib.onPlay = { [weak self] url, rect in self?.play(url: url, from: rect) }
             library = lib
         }
         library?.refreshForAppearance()
@@ -132,16 +132,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func play(url: URL) {
+    func play(url: URL, from sourceRect: NSRect? = nil) {
         do {
             let rom = try ROMLoader.load(url: url)
             let game = GameWindowController(
-                rom: rom, title: url.deletingPathExtension().lastPathComponent, url: url)
+                rom: rom, title: url.deletingPathExtension().lastPathComponent, url: url,
+                sourceRect: sourceRect)
             game.onClose = { [weak self, weak game] in
                 self?.gameWindows.removeAll { $0 === game }
             }
             gameWindows.append(game)
-            game.showWindow(nil)
+            game.launch()
         } catch {
             let alert = NSAlert()
             alert.messageText = "Could not load ROM"

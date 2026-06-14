@@ -2,6 +2,28 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [1.3.0] — 2026-06-14
+
+### Added
+- **Focused launch experience** — selecting a game powers the console on: it zooms
+  out of the chosen box art, expands to a larger play size, and dims everything
+  behind, with a synthesized DMG power‑switch click. The game window is chrome‑free
+  so nothing competes with the screen, and Exit powers off the same way (click +
+  zoom back into the art).
+- **In‑game control bar** — a subtle, translucent bar at the bottom of the game with
+  Hardcore Lighting, Worm Light, Full Screen, and Exit. It and the achievements
+  drawer's reveal handle appear on mouse movement and fade away while you play.
+- **Full screen** for the game window.
+- **T3d LCD Real Feel™** — recreates an old LCD's pixel persistence by blending each
+  frame with the previous one. Games that faked transparency by flickering pixels
+  every frame (e.g. Donkey Kong's attract demo) now render as the intended steady,
+  semi‑transparent image instead of harsh strobing. On by default, alongside
+  Hardcore Lighting and Worm Light.
+
+### Changed
+- The emulator screen now scales to fit — a larger focused play size and full‑screen
+  support — instead of a fixed window size.
+
 ## [1.2.1] — 2026-06-13
 
 ### Fixed

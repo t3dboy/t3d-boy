@@ -15,10 +15,16 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 - **Per-system ROM folders** — point each tab at its own folder
 - **Save states** (5 slots per game), **pause**, and a **fake boot screen** with
   T3d's chime
+- **Focused play** — games open by zooming out of their box art into a clean,
+  chrome-free window (with a power-switch click and dimmed surroundings); a subtle
+  auto-hiding control bar offers lighting toggles, full screen, and exit
 - **Hardcore Lighting** — recreates the non-backlit DMG by dimming the screen to match
   your room's ambient light (⌃⌘H)
 - **Worm Light** — a warm, aimable '90s-style clip-on light that reflects across the
   screen so you can see in the dark; drag it on the game preview display to angle it (⌃⌘L)
+- **T3d LCD Real Feel™** — blends each frame with the last to recreate an old LCD's
+  pixel persistence, so games that fake transparency by flickering pixels render as
+  intended instead of strobing
 - **RetroAchievements** — optional sign-in to track unlocks, points, leaderboards,
   and mastery, with an achievements drawer you can pop out in the library or in-game,
   plus an optional hardcore mode. See [docs/retroachievements.md](docs/retroachievements.md)

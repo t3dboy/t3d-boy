@@ -9,35 +9,35 @@ into the app bundle and names the DMG `T3dBoy-<version>.dmg`.
 1. **Bump the version**
 
    ```sh
-   echo "1.2.1" > VERSION
+   echo "1.3.0" > VERSION
    ```
 
-2. **Update the changelog** — add a `## [1.2.1]` section to `CHANGELOG.md`.
+2. **Update the changelog** — add a `## [1.3.0]` section to `CHANGELOG.md`.
 
 3. **Build the DMG**
 
    ```sh
-   ./build.sh          # produces build/T3dBoy-1.2.1.dmg
+   ./build.sh          # produces build/T3dBoy-1.3.0.dmg
    ```
 
 4. **Commit, tag, and push**
 
    ```sh
    git add VERSION CHANGELOG.md
-   git commit -m "Release 1.2.1"
-   git tag v1.2.1
+   git commit -m "Release 1.3.0"
+   git tag v1.3.0
    git push github main --tags
    ```
 
 5. **Create the GitHub Release** and attach the DMG.
 
    ```sh
-   gh release create v1.2.1 "build/T3dBoy-1.2.1.dmg" --repo t3dboy/t3d-boy \
-     --title "T3d Boy 1.2.1" \
-     --notes "$(sed -n '/## \[1.2.1\]/,/## \[/p' CHANGELOG.md | sed '$d')"
+   gh release create v1.3.0 "build/T3dBoy-1.3.0.dmg" --repo t3dboy/t3d-boy \
+     --title "T3d Boy 1.3.0" \
+     --notes "$(sed -n '/## \[1.3.0\]/,/## \[/p' CHANGELOG.md | sed '$d')"
    ```
 
-   Or in the web UI: **Releases → Draft a new release**, pick tag `v1.2.1`,
+   Or in the web UI: **Releases → Draft a new release**, pick tag `v1.3.0`,
    paste the changelog notes, and upload the DMG as a release asset.
 
 ## Notes
