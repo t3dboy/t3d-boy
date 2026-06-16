@@ -527,6 +527,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     /// The Engineer theme wraps the library in device chrome (I/O bar, header plate,
     /// trim) and needs extra vertical room.
     private var isEngineer: Bool { theme.id == "engineer" }
+    /// Liquid Glass makes the whole window see-through (behind-window vibrancy), so the
+    /// Mac desktop shows through the app and the glass controls refract it.
+    private var isLiquidGlass: Bool { theme.id == "liquidglass" }
     private var topInset: CGFloat { isEngineer ? 130 : 10 }
     private var bottomInset: CGFloat { isEngineer ? 34 : 12 }
 
@@ -770,6 +773,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         drawerWidthConstraint.isActive = true
 
         if isEngineer { addEngineerChrome(content) }
+        if isLiquidGlass { applyGlassBackdrop() }
 
         styleChrome()
     }
@@ -820,11 +824,25 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         ])
     }
 
+    /// Makes the window see-through for Liquid Glass via per-pixel transparency: the
+    /// window is non-opaque with a clear background and the panels are translucent, so the
+    /// real desktop shows through the chrome — but opaque content (the box art) stays
+    /// solid, unlike a window-wide opacity which would dim everything.
+    private func applyGlassBackdrop() {
+        guard let window else { return }
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        window.titlebarAppearsTransparent = true
+    }
+
     /// Applies the active theme's surfaces, fonts and colours to the window chrome.
     /// Called on build and whenever the theme or appearance changes.
     private func styleChrome() {
         window?.title = theme.cased("T3d Boy — ROM Library")
-        window?.backgroundColor = theme.skinned ? theme.surfaceWindow : .windowBackgroundColor
+        // Liquid Glass: a uniform 25%-opaque glass film across the whole window (so the
+        // chrome is a bit visible, ~75% see-through), with the desktop showing through.
+        window?.backgroundColor = isLiquidGlass ? NSColor(white: 1, alpha: 0.25)
+            : (theme.skinned ? theme.surfaceWindow : .windowBackgroundColor)
 
         titleLabel.font = theme.fontDetailTitle
         titleLabel.textColor = theme.textPrimary

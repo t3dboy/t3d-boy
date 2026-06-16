@@ -6,7 +6,7 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 
 ## Features
 
-- **Three switchable themes** — give the whole app a different personality from
+- **Four switchable themes** — give the whole app a different personality from
   Preferences ▸ Appearance:
   - **Classic** — clean, system-native macOS (light or dark).
   - **Pistachio** *(default)* — a warm soft-dark skin with rounded type and a coral /
@@ -14,6 +14,10 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   - **Engineer** — a boutique-synth-style hardware look: a light-grey "device" body
     with orange rubber keys, red-LED read-outs, a drilled speaker grille, hex screws, and
     a live LED counter of your total play time.
+  - **Liquid Glass** — thought Apple's implementation of Liquid Glass was bad? T3d Boy
+    takes it to another level of let-down. The whole app becomes a see-through sheet of
+    glass — the desktop shows straight through it — and the buttons are glass too, slowly
+    *melting*, with droplets drooling off their edges.
 
   ![The Engineer theme](tools/screenshot-engineer.png)
 
@@ -43,6 +47,10 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   name or play time, and per-game play-time tracking
 - **Save states** (5 slots per game), **pause**, and **game controller support**
   (DualShock / DualSense / Xbox / Switch Pro over Bluetooth)
+- **Update notifications** — T3d Boy checks GitHub for new releases and lets you know with
+  a tap on the shoulder from T3d the mascot, showing the changelog with Download / Ignore
+  / Stop reminding me. Opt out in Preferences ▸ Appearance, or check any time from
+  **T3d Boy ▸ Check for Updates…**
 
 📖 **Full feature walkthrough: [docs/user-guide.md](docs/user-guide.md)**
 

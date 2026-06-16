@@ -235,6 +235,8 @@ final class CapsuleButton: FocusableControl {
     private let label = NSTextField(labelWithString: "")
     private var hovered = false
     private var pressed = false
+    private var isGlass: Bool { theme.id == "liquidglass" }
+    private lazy var glass: GlassSkin? = isGlass ? GlassSkin() : nil
 
     var onClick: (() -> Void)?
     var isEnabled = true {
@@ -267,6 +269,17 @@ final class CapsuleButton: FocusableControl {
             label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
             label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
         ])
+
+        if let glass {
+            glass.install(on: layer!)
+            // A soft text shadow keeps the label legible through the translucent glass.
+            label.wantsLayer = true
+            let s = NSShadow()
+            s.shadowColor = NSColor.black.withAlphaComponent(0.3)
+            s.shadowBlurRadius = 2
+            s.shadowOffset = NSSize(width: 0, height: -1)
+            label.shadow = s
+        }
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -285,7 +298,7 @@ final class CapsuleButton: FocusableControl {
 
     override func layout() {
         super.layout()
-        layer?.cornerRadius = theme.skinned ? theme.radiusMedium : bounds.height / 2
+        if !isGlass { layer?.cornerRadius = theme.skinned ? theme.radiusMedium : bounds.height / 2 }
         refreshColors()
     }
 
@@ -314,6 +327,17 @@ final class CapsuleButton: FocusableControl {
     }
 
     private func refreshColors() {
+        if let glass {
+            // Real glass: a translucent tinted pane that melts. Azure for the one
+            // prominent action (Play), near-clear for neutral buttons.
+            let lift: CGFloat = pressed ? 0.14 : hovered ? 0.07 : 0
+            let tintColor = style == .prominent ? theme.accent : NSColor(hex: 0xDCEBFF)
+            glass.update(bounds: bounds, radius: bounds.height / 2, tintColor: tintColor,
+                         drips: GlassSkin.drips(width: bounds.width, heavy: style == .prominent),
+                         lift: lift)
+            label.textColor = style == .prominent ? .white : theme.textPrimary
+            return
+        }
         effectiveAppearance.performAsCurrentDrawingAppearance {
             switch style {
             case .prominent:

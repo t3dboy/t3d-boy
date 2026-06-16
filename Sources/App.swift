@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var onboarding: OnboardingWindowController?
     var achievementToasts: AchievementToastController?
     var preferences: PreferencesWindowController?
+    var updatePrompt: UpdatePromptWindowController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         ROMFolders.migrateIfNeeded()
@@ -20,6 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         GamepadManager.shared.onStatusChange = { [weak self] in
             self?.gameWindows.forEach { $0.updateControllerStatus() }
         }
+
+        UpdateChecker.registerDefaults()
 
         // RetroAchievements: optional, degrades gracefully if unavailable.
         RASettings.registerDefaults()
@@ -56,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         showLibrary()
+        checkForUpdatesOnLaunch()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication,
@@ -171,6 +175,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: - Updates
+
+    /// Silent launch check: only when the user has auto-check on, and only surfaces a
+    /// prompt for a newer release they haven't skipped.
+    private func checkForUpdatesOnLaunch() {
+        if UpdateChecker.isPreview { presentUpdatePrompt(UpdateChecker.previewRelease); return }
+        guard UpdateChecker.autoCheckEnabled else { return }
+        UpdateChecker.check(force: false) { [weak self] outcome in
+            guard case .available(let release) = outcome,
+                  release.version != UpdateChecker.skippedVersion else { return }
+            self?.presentUpdatePrompt(release)
+        }
+    }
+
+    /// Manual "Check for Updates…" — always reports a result, and shows the prompt even
+    /// for a version the user previously skipped (they explicitly asked).
+    @objc func checkForUpdates(_ sender: Any?) {
+        NSApp.activate(ignoringOtherApps: true)
+        UpdateChecker.check(force: true) { [weak self] outcome in
+            switch outcome {
+            case .available(let release):
+                self?.presentUpdatePrompt(release)
+            case .upToDate:
+                self?.showUpToDateAlert()
+            case .failed(let message):
+                self?.showUpdateErrorAlert(message)
+            }
+        }
+    }
+
+    private func presentUpdatePrompt(_ release: UpdateChecker.Release) {
+        if updatePrompt?.window?.isVisible == true { return } // already showing
+        let prompt = UpdatePromptWindowController(release: release)
+        prompt.onClose = { [weak self] in self?.updatePrompt = nil }
+        updatePrompt = prompt
+        prompt.showWindow(nil)
+        prompt.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func showUpToDateAlert() {
+        let alert = NSAlert()
+        alert.messageText = "You're up to date"
+        alert.informativeText = "T3d Boy \(UpdateChecker.currentVersion) is the latest version."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    private func showUpdateErrorAlert(_ message: String) {
+        let alert = NSAlert()
+        alert.messageText = "Couldn't check for updates"
+        alert.informativeText = message
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     func play(url: URL, from sourceRect: NSRect? = nil) {
         do {
             let rom = try ROMLoader.load(url: url)
@@ -233,6 +293,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Preferences…",
                         action: #selector(showPreferences(_:)), keyEquivalent: ",")
+        appMenu.addItem(withTitle: "Check for Updates…",
+                        action: #selector(checkForUpdates(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "Quit T3d Boy",
                         action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")

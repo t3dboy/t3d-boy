@@ -311,6 +311,69 @@ extension Theme {
         animMedium: 0.2
     )
 
+    /// "Liquid Glass" — a parody of Apple's glassy design language: bright, cool, frosted
+    /// and bulbous… that's melting. Light-only; the melt drips are drawn by
+    /// `LiquidGlassChrome`. Selection is a saturated glass blue so white text reads on it.
+    static let liquidGlass = Theme(
+        id: "liquidglass",
+        name: "Liquid Glass",
+        skinned: true,
+        lowercaseLabels: false,
+        forcedAppearance: .aqua, // glass reads best bright
+        usesVibrancy: false, // real see-through glass, not a frosted vibrancy material
+        // Per-pixel see-through: the window is clear and these panels are translucent, so
+        // the real desktop shows through the chrome while opaque content (box art) stays
+        // solid. Tuned so the glass has structure but you still see the desktop through it.
+        surfaceWindow: NSColor(hex: 0xE7EFF8),                 // fallback (e.g. update prompt)
+        surfacePanel: NSColor(white: 1, alpha: 0.08),          // slight structure over the 25% film
+        surfaceBar: NSColor(white: 1, alpha: 0.10),
+        surfaceFooter: NSColor(white: 1, alpha: 0.08),
+        surfaceInset: NSColor(white: 1, alpha: 0.22),          // tab track, sort field (affordance)
+        surfaceScreen: NSColor(hex: 0x14304F),                 // deep glass LCD housing
+        lineHard: NSColor(hex: 0xBBD0E8),
+        lineHair: NSColor(white: 0.15, alpha: 0.08),
+        controlEdge: NSColor(hex: 0xAFC8E4),
+        textPrimary: NSColor(hex: 0x18293E),
+        textSecondary: NSColor(hex: 0x415066),
+        textTitleBar: NSColor(hex: 0x415066),
+        textListIdle: NSColor(hex: 0x26384E),
+        textMuted: NSColor(hex: 0x7C8DA4),
+        textFaint: NSColor(hex: 0x9AA9BE),
+        onLight: .white,
+        accent: NSColor(hex: 0x2E8BFF),        // glass azure
+        onAccent: .white,
+        keyCoral: NSColor(hex: 0x2E8BFF),      // hero = azure
+        keyGreen: NSColor(hex: 0x2E8BFF),      // go / toggle-on = azure
+        keyYellow: NSColor(hex: 0xFFC857),
+        keyBlue: NSColor(hex: 0x49C0E8),
+        onGreen: .white,
+        onYellow: NSColor(hex: 0x2A1B00),
+        tabAccents: [NSColor(hex: 0x2E8BFF), NSColor(hex: 0x49C0E8), NSColor(hex: 0xFFC857)],
+        selection: NSColor(hex: 0x2E8BFF).withAlphaComponent(0.85),
+        selectionEdge: NSColor(hex: 0x7FB4FF),
+        star: NSColor(hex: 0xFFC857),
+        warm: NSColor(hex: 0xFF9F4A),
+        cool: NSColor(hex: 0x49C0E8),
+        meterEmpty: NSColor(hex: 0xCBD8EA),
+        toggleOffTrack: NSColor(hex: 0xC4D6EC),
+        toggleOffKnob: .white,
+        sidebarMaterial: .popover, // bright frosted blur in the Preferences sidebar
+        hudMaterial: .hudWindow,
+        fontTitle: .systemFont(ofSize: 19, weight: .semibold),
+        fontDetailTitle: .systemFont(ofSize: 22, weight: .bold),
+        fontSectionHeader: .systemFont(ofSize: 11, weight: .semibold),
+        fontBody: .systemFont(ofSize: 13, weight: .regular),
+        fontCaption: .systemFont(ofSize: 11, weight: .regular),
+        fontMonoSmall: .monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
+        radiusSmall: 10,
+        radiusMedium: 16,
+        radiusLarge: 26, // bulbous glass
+        spacing: 9,
+        spacingLarge: 17,
+        animFast: 0.18,
+        animMedium: 0.32
+    )
+
     /// The red LED read-out colour for Engineer (rank, scores, status). Generic themes
     /// fall back to the accent.
     var led: NSColor { id == "engineer" ? NSColor(hex: 0xFF3320) : accent }
@@ -353,7 +416,7 @@ final class ThemeManager {
     private(set) var current: Theme
 
     private init() {
-        all = [.classic, .pistachio, .engineer]
+        all = [.classic, .pistachio, .engineer, .liquidGlass]
         let savedID = UserDefaults.standard.string(forKey: key)
         // Pistachio is the default look for a fresh install; saved choice wins.
         current = all.first { $0.id == savedID } ?? .pistachio

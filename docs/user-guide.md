@@ -14,6 +14,7 @@ Game Boy Color emulator.
 - [Themes](#themes)
 - [RetroAchievements](#retroachievements)
 - [Accessibility](#accessibility)
+- [Software updates](#software-updates)
 - [Preferences reference](#preferences-reference)
 - [Menus & keyboard shortcuts](#menus--keyboard-shortcuts)
 - [Tips & troubleshooting](#tips--troubleshooting)
@@ -186,6 +187,21 @@ device:
 Engineer is a light-only theme, so the **Dark mode** toggle is disabled while it's
 selected.
 
+### Liquid Glass
+Thought Apple's implementation of Liquid Glass was bad? T3d Boy takes it to another level
+of let-down. It's a parody of the glass design language:
+
+- the **whole app becomes a see-through sheet of glass** — the Mac desktop shows straight
+  through the window, the list and the panels (about 75% see-through);
+- the **buttons are glass too**, and they're *melting* — translucent panes with a glossy
+  top, a bright rim, and **droplets drooling off the bottom edge**;
+- the **box art and the game screen stay solid**, so what you actually need to see is
+  never see-through.
+
+Liquid Glass is a light-only theme, so the **Dark mode** toggle is disabled while it's
+selected. (On a very busy or dark wallpaper, list text can get harder to read — that's
+the nature of real glass.)
+
 > **Switching themes keeps you in place** — if you change theme from the Appearance tab,
 > Preferences stays on the Appearance tab afterwards.
 
@@ -221,6 +237,24 @@ See the dedicated guide: **[docs/accessibility.md](accessibility.md)**.
 
 ---
 
+## Software updates
+
+T3d Boy can let you know when a new version is out. On launch it quietly checks GitHub for
+the latest release; if there's a newer one, **T3d the mascot pops up** with the version,
+its changelog, and three choices:
+
+- **Download** — opens the new release so you can grab the `.dmg` (nothing is downloaded
+  or installed automatically).
+- **Ignore for Now** — closes the prompt; it'll mention it again next time.
+- **Stop Reminding Me About This Version** — silences *that* release. You'll still be told
+  about future versions.
+
+The check is HTTPS-only and sends nothing about you. To turn the launch check off, uncheck
+**Preferences ▸ Appearance ▸ Check for updates automatically**. You can check on demand at
+any time from **T3d Boy ▸ Check for Updates…**.
+
+---
+
 ## Preferences reference
 
 Open with **⌘,**. The sidebar groups settings into three sections:
@@ -236,9 +270,10 @@ Open with **⌘,**. The sidebar groups settings into three sections:
   has no ambient-light reading; Worm Light is locked on while Road Trip Mode is active.
 
 **Appearance**
-- *Theme* — Classic / Pistachio / Engineer.
+- *Theme* — Classic / Pistachio / Engineer / Liquid Glass.
 - *Dark mode* — light or dark (Classic only; disabled for themes with a fixed palette).
 - *Show the FPS counter in the game window*.
+- *Check for updates automatically* — look for a new version on launch (on by default).
 
 ---
 
@@ -247,6 +282,7 @@ Open with **⌘,**. The sidebar groups settings into three sections:
 | Action | Shortcut |
 |---|---|
 | Preferences | ⌘, |
+| Check for Updates… | — (T3d Boy menu) |
 | ROM Library | ⌘L |
 | Open ROM… | ⌘O |
 | Pause | Space (in game) / ⌘P |

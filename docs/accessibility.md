@@ -92,10 +92,15 @@ sound still plays.
 | ROM list | Standard table — rows read their title and stats; arrow keys move selection |
 | Box art | Image, labelled with the current game |
 | Effect & settings toggles | Checkboxes with on/off state and a spoken name |
-| Theme picker | Standard radio buttons (Classic / Pistachio / Engineer) |
+| Theme picker | Standard radio buttons (Classic / Pistachio / Engineer / Liquid Glass) |
 | Achievements drawer handle | Button ("Show/Hide achievements") |
 | Sign-in form, sliders, popups | Native macOS controls (fully accessible) |
 | Achievement unlocks | Spoken announcements |
+
+> **Low vision:** the **Liquid Glass** theme makes the app see-through, which lowers text
+> contrast over a busy desktop. For maximum legibility, use **Classic** (which follows
+> your system light/dark and accent settings) or **Engineer** (high-contrast dark text on
+> a light body). The box art and game screen stay solid in every theme.
 
 ---
 

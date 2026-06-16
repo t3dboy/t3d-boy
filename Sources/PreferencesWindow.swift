@@ -71,6 +71,7 @@ final class PreferencesWindowController: NSWindowController {
     private var themeRadios: [NSButton] = []
     private let darkModeToggle = SettingToggle()
     private let fpsToggle = SettingToggle()
+    private let updateToggle = SettingToggle()
 
     private var darkModeRow: NSView?
     private var wormRow: NSView?
@@ -96,10 +97,16 @@ final class PreferencesWindowController: NSWindowController {
 
     private func buildUI() {
         guard let content = window?.contentView else { return }
-        window?.backgroundColor = theme.skinned ? theme.surfaceWindow : .windowBackgroundColor
-        if theme.skinned {
-            content.wantsLayer = true
-            content.layer?.backgroundColor = theme.surfaceWindow.cgColor
+        if theme.id == "liquidglass" {
+            // Match the library: a see-through 25%-glass window so the desktop shows through.
+            window?.isOpaque = false
+            window?.backgroundColor = NSColor(white: 1, alpha: 0.25)
+        } else {
+            window?.backgroundColor = theme.skinned ? theme.surfaceWindow : .windowBackgroundColor
+            if theme.skinned {
+                content.wantsLayer = true
+                content.layer?.backgroundColor = theme.surfaceWindow.cgColor
+            }
         }
 
         wireControls()
@@ -149,6 +156,8 @@ final class PreferencesWindowController: NSWindowController {
             labeledRow("Theme", themeSelector()),
             darkRow,
             toggleRow("Show the FPS counter in the game window", fpsToggle),
+            toggleRow("Check for updates automatically", updateToggle,
+                      subtitle: "Look for a new version on launch and let you know with the changelog"),
         ])
 
         let defs: [(String, String, NSView)] = [
@@ -242,6 +251,7 @@ final class PreferencesWindowController: NSWindowController {
         roadTripToggle.onToggle = { RoadTripLighting.isEnabled = $0 }
         darkModeToggle.onToggle = { (NSApp.delegate as? AppDelegate)?.setAppearance(dark: $0) }
         fpsToggle.onToggle = { RASettings.showFPS = $0 }
+        updateToggle.onToggle = { UpdateChecker.autoCheckEnabled = $0 }
     }
 
     /// Radio-button theme picker (native, reliably clickable). Grouped by shared action.
@@ -396,6 +406,7 @@ final class PreferencesWindowController: NSWindowController {
         volumeSlider.isEnabled = RASettings.unlockSound
         cornerPopup.selectItem(at: RASettings.toastCorner.rawValue)
         fpsToggle.isOn = RASettings.showFPS
+        updateToggle.isOn = UpdateChecker.autoCheckEnabled
         if let i = ThemeManager.shared.all.firstIndex(where: { $0.id == theme.id }) {
             for (j, b) in themeRadios.enumerated() { b.state = (j == i) ? .on : .off }
         }

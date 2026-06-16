@@ -2,6 +2,25 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [2.2.0] — 2026-06-16
+
+### Added
+- **Liquid Glass theme** — a fourth theme, and a loving parody of Apple's glass design
+  language. Thought Apple's implementation of Liquid Glass was bad? T3d Boy takes it to
+  another level of let-down: the whole app turns into a see-through sheet of glass — the
+  Mac desktop shows straight through the window — and the buttons are glass too, slowly
+  *melting*, with droplets drooling off their bottom edges. The box art and the game
+  screen stay solid so they're always readable. Pick it in Preferences ▸ Appearance ▸
+  Theme.
+- **Update notifications** — T3d Boy can check GitHub for a newer release and let you
+  know with a tap on the shoulder from T3d the mascot, showing the new version and its
+  changelog with **Download**, **Ignore for Now**, or **Stop reminding me about this
+  version** (which silences just that release — future ones still notify). It runs on
+  launch (turn it off in Preferences ▸ Appearance ▸ *Check for updates automatically*),
+  or check any time from **T3d Boy ▸ Check for Updates…**. The check is HTTPS-only and
+  never downloads or installs anything on its own — clicking Download just opens the
+  release in your browser.
+
 ## [2.1.1] — 2026-06-14
 
 A security-hardening release focused on RetroAchievements sign-in and credential storage.
