@@ -49,6 +49,12 @@ final class EmulatorView: NSView {
         effects.apply(dimOpacity: dim, wormOn: worm)
     }
 
+    /// Whether T3d Boy Light may apply here (false for Game Boy Color games).
+    var allowsBacklight: Bool {
+        get { effects.allowsBacklight }
+        set { effects.allowsBacklight = newValue }
+    }
+
     private var previousFrame: [UInt32]?
 
     func present(_ framebuffer: [UInt32]) {
@@ -175,6 +181,9 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         PlayStats.shared.recordPlay(url)
         startTimer()
         startAudio()
+        // T3d Boy Light is a Game Boy–only effect; never apply it to a Game Boy Color game.
+        emulatorView.allowsBacklight = !gb.cgb
+        controlBar.t3dLightAvailable = !gb.cgb
         applyEffects() // apply current dim/worm-light immediately on open
 
         // Toggling either effect (from any window or the menu) updates this window
@@ -698,8 +707,8 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             menuItem.state = WormLight.isEnabled ? .on : .off
             return true
         case #selector(toggleT3dBoyLight(_:)):
-            menuItem.state = T3dBoyLight.isEnabled ? .on : .off
-            return true
+            menuItem.state = (T3dBoyLight.isEnabled && !gb.cgb) ? .on : .off
+            return !gb.cgb // never offered for a Game Boy Color game
         case #selector(saveState(_:)), #selector(loadState(_:)):
             let url = stateURL(slot: menuItem.tag)
             let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)

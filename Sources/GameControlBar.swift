@@ -14,6 +14,8 @@ final class GameControlBar: NSView {
     var onFullScreen: (() -> Void)?
     var onExit: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
+    /// T3d Boy Light isn't offered for Game Boy Color games (it never existed on the GBC).
+    var t3dLightAvailable = true { didSet { refreshStates() } }
 
     private let hardcoreBtn = GameControlBar.button("sun.max", "Hardcore Lighting")
     private let wormBtn = GameControlBar.button("flashlight.on.fill", "Worm Light")
@@ -104,7 +106,9 @@ final class GameControlBar: NSView {
             ? theme.star : NSColor.white.withAlphaComponent(0.7)
         wormBtn.contentTintColor = WormLight.isEnabled
             ? theme.warm : NSColor.white.withAlphaComponent(0.7)
-        t3dLightBtn.contentTintColor = T3dBoyLight.isEnabled
+        t3dLightBtn.isEnabled = t3dLightAvailable
+        t3dLightBtn.alphaValue = t3dLightAvailable ? 1 : 0.4
+        t3dLightBtn.contentTintColor = (T3dBoyLight.isEnabled && t3dLightAvailable)
             ? theme.cool : NSColor.white.withAlphaComponent(0.7)
     }
 

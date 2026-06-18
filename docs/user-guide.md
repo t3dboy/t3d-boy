@@ -133,7 +133,9 @@ Effects**.
   glowing display."* Recreates the **Game Boy Light**'s EL backlight: the screen glows an
   even teal/cyan-green (recolouring the picture while keeping its light/dark detail, so
   games stay readable), brightest in the centre and falling off to a gently darker teal at
-  the edges — the slightly uneven look of the real panel.
+  the edges — the slightly uneven look of the real panel. **Game Boy only:** the Game Boy
+  Light never existed for the Game Boy Color, so selecting a GBC game switches this off and
+  disables it.
 
 ### Hardcore Lighting — supported devices
 

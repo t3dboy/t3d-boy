@@ -41,7 +41,8 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   - *T3d LCD Real Feel™* blends frames to recreate LCD pixel persistence, so games that
     faked transparency by flickering render as intended instead of strobing
   - *T3d Boy Light* — the Game Boy Light's electroluminescent teal-blue backlight: the
-    screen glows an even teal with a gently darker vignette toward the edges (⌃⌘B)
+    screen glows an even teal with a gently darker vignette toward the edges (⌃⌘B). Game
+    Boy only — it switches off for Game Boy Color games, just like the real accessory
 - **ROM library** with auto-generated box art (each game's title screen, captured by
   booting it headlessly), Game Boy / Color / Favourites tabs, sorting by popularity,
   name or play time, and per-game play-time tracking

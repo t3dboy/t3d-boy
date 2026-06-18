@@ -2,6 +2,15 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [2.3.1] — 2026-06-18
+
+### Changed
+- **T3d Boy Light is Game Boy only now.** The Game Boy Light never existed for the Game
+  Boy Color, so the effect no longer applies to GBC games: selecting a Game Boy Color ROM
+  automatically deselects T3d Boy Light and disables its toggle, and the effect is
+  unavailable in-game (the control-bar button and ⌃⌘B) for colour titles. It remains
+  available for Game Boy games.
+
 ## [2.3.0] — 2026-06-18
 
 ### Added

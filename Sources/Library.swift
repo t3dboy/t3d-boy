@@ -509,6 +509,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let lcdSwitch = SettingToggle()
     private let t3dLightSwitch = SettingToggle()
     private var wormRow: NSView?
+    private var t3dLightRow: NSView?
     private var effectsTimer: Timer?
 
     // Achievements drawer: tucked off the right edge, popped out via the handle to
@@ -899,11 +900,13 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
                               footer: hcSupported ? nil : ThemedUI.infoPill("Not compatible with this device"),
                               dim: !hcSupported)
         let topRow = NSStackView(views: [hcRow, wormRowView])
+        let t3dLightRowView = effectRow("T3d Boy Light",
+                                        "Only popular in Japan, an electroluminescent teal blue glowing display",
+                                        t3dLightSwitch)
+        t3dLightRow = t3dLightRowView
         let bottomRow = NSStackView(views: [
             effectRow("T3d LCD Real Feel™", "Faithfully emulates an old LCD's pixel persistence", lcdSwitch),
-            effectRow("T3d Boy Light",
-                      "Only popular in Japan, an electroluminescent teal blue glowing display",
-                      t3dLightSwitch),
+            t3dLightRowView,
         ])
         for row in [topRow, bottomRow] {
             row.orientation = .horizontal
@@ -973,6 +976,16 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         }
         NSLayoutConstraint.activate(cs)
         return container
+    }
+
+    /// T3d Boy Light is a Game Boy–only effect — the Game Boy Light never existed for the
+    /// Game Boy Color. So for a GBC pick we turn the option off (deselect it) and disable
+    /// its toggle; for a Game Boy game it's available again.
+    private func updateT3dLightAvailability(for rom: URL) {
+        let isGBC = ROMCatalog.shared.kind(for: rom) == .gbc
+        if isGBC && T3dBoyLight.isEnabled { T3dBoyLight.isEnabled = false } // posts .screenEffectsChanged
+        t3dLightSwitch.isEnabled = !isGBC
+        t3dLightRow?.alphaValue = isGBC ? 0.4 : 1
     }
 
     // Switch states + the art preview, kept in step with the global toggles
@@ -1271,6 +1284,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         artView.setAccessibilityLabel("Box art for \(name)")
         updateFavButton(for: rom)
         updateStats(for: rom)
+        updateT3dLightAvailability(for: rom)
         artView.image = nil
         if DemoMode.isActive {
             artView.image = DemoMode.art // the T3d Boy boot screen as box art

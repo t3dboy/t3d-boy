@@ -187,6 +187,9 @@ final class ScreenEffects {
     private let vignetteLayer = CAGradientLayer() // T3d Boy Light edge darkening (multiply)
     private var lastDim: Float = 0
     private var lastWorm = false
+    /// T3d Boy Light only made sense on the original Game Boy; a CGB host sets this false
+    /// so the teal backlight never applies to a Game Boy Color game.
+    var allowsBacklight = true
 
     init(host: CALayer) {
         lightLayer.magnificationFilter = .linear // smooth light, not pixel art
@@ -227,7 +230,7 @@ final class ScreenEffects {
     func apply(dimOpacity: Float, wormOn: Bool, animated: Bool = false) {
         lastDim = dimOpacity
         lastWorm = wormOn
-        let backlight = T3dBoyLight.isEnabled
+        let backlight = T3dBoyLight.isEnabled && allowsBacklight
 
         let needMap = dimOpacity > 0.001 || wormOn
         lightLayer.isHidden = !needMap
