@@ -335,7 +335,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         ])
         controlBar.onToggleHardcore = { HardcoreLighting.isEnabled.toggle() }
         controlBar.onToggleWorm = { WormLight.isEnabled.toggle() }
-        controlBar.onToggleRoadTrip = { RoadTripLighting.isEnabled.toggle() }
+        controlBar.onToggleT3dLight = { T3dBoyLight.isEnabled.toggle() }
         controlBar.onFullScreen = { [weak self] in self?.window?.toggleFullScreen(nil) }
         controlBar.onExit = { [weak self] in self?.exitFocus() }
         let hoverHandler: (Bool) -> Void = { [weak self] hovering in
@@ -516,8 +516,8 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         WormLight.isEnabled.toggle()
     }
 
-    @objc func toggleRoadTripMode(_ sender: Any?) {
-        RoadTripLighting.isEnabled.toggle()
+    @objc func toggleT3dBoyLight(_ sender: Any?) {
+        T3dBoyLight.isEnabled.toggle()
     }
 
     private func flushPlaytime(stop: Bool) {
@@ -696,9 +696,9 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
             return HardcoreLighting.isSupported // unavailable without an ambient-light reading
         case #selector(toggleWormLight(_:)):
             menuItem.state = WormLight.isEnabled ? .on : .off
-            return !RoadTripLighting.isEnabled // locked on while Road Trip Mode is active
-        case #selector(toggleRoadTripMode(_:)):
-            menuItem.state = RoadTripLighting.isEnabled ? .on : .off
+            return true
+        case #selector(toggleT3dBoyLight(_:)):
+            menuItem.state = T3dBoyLight.isEnabled ? .on : .off
             return true
         case #selector(saveState(_:)), #selector(loadState(_:)):
             let url = stateURL(slot: menuItem.tag)

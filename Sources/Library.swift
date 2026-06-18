@@ -507,7 +507,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let hardcoreSwitch = SettingToggle()
     private let wormSwitch = SettingToggle()
     private let lcdSwitch = SettingToggle()
-    private let roadTripSwitch = SettingToggle()
+    private let t3dLightSwitch = SettingToggle()
     private var wormRow: NSView?
     private var effectsTimer: Timer?
 
@@ -880,11 +880,11 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         hardcoreSwitch.onToggle = { HardcoreLighting.isEnabled = $0 } // posts .screenEffectsChanged
         wormSwitch.onToggle = { WormLight.isEnabled = $0 }
         lcdSwitch.onToggle = { LCDGhosting.isEnabled = $0 }
-        roadTripSwitch.onToggle = { RoadTripLighting.isEnabled = $0 }
+        t3dLightSwitch.onToggle = { T3dBoyLight.isEnabled = $0 }
         hardcoreSwitch.setAccessibilityName("Hardcore Lighting. Automatically dim the display to ambient light")
         wormSwitch.setAccessibilityName("Worm Light. A warm clip-on light over the screen")
         lcdSwitch.setAccessibilityName("T3d LCD Real Feel. Emulates an old LCD's pixel persistence")
-        roadTripSwitch.setAccessibilityName("Road Trip Mode. Lighting from the back seat of your parents car at night as you pass street lights")
+        t3dLightSwitch.setAccessibilityName("T3d Boy Light. Only popular in Japan, an electroluminescent teal blue glowing display")
 
         // Laid out 2 × 2 now that there are four effects.
         let wormRowView = effectRow("Worm Light", "Shine a warm ’90s clip-on light down over the screen", wormSwitch)
@@ -901,9 +901,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         let topRow = NSStackView(views: [hcRow, wormRowView])
         let bottomRow = NSStackView(views: [
             effectRow("T3d LCD Real Feel™", "Faithfully emulates an old LCD's pixel persistence", lcdSwitch),
-            effectRow("Road Trip Mode",
-                      "Lighting from the back seat of your parents car at night as you pass street lights",
-                      roadTripSwitch),
+            effectRow("T3d Boy Light",
+                      "Only popular in Japan, an electroluminescent teal blue glowing display",
+                      t3dLightSwitch),
         ])
         for row in [topRow, bottomRow] {
             row.orientation = .horizontal
@@ -980,11 +980,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         hardcoreSwitch.isOn = HardcoreLighting.isEnabled
         wormSwitch.isOn = WormLight.isEnabled
         lcdSwitch.isOn = LCDGhosting.isEnabled
-        roadTripSwitch.isOn = RoadTripLighting.isEnabled
-        // Road Trip Mode forces the worm light on and locks it.
-        let wormLocked = RoadTripLighting.isEnabled
-        wormSwitch.isEnabled = !wormLocked
-        wormRow?.alphaValue = wormLocked ? 0.4 : 1
+        t3dLightSwitch.isOn = T3dBoyLight.isEnabled
         applyArtEffects()
     }
 
@@ -1034,7 +1030,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         // Clean art: no lighting effects on the box-art preview.
         HardcoreLighting.isEnabled = false
         WormLight.isEnabled = false
-        RoadTripLighting.isEnabled = false
+        T3dBoyLight.isEnabled = false
 
         window.setContentSize(NSSize(width: 880, height: 600))
         reload()

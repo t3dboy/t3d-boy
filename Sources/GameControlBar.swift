@@ -10,14 +10,14 @@ import Cocoa
 final class GameControlBar: NSView {
     var onToggleHardcore: (() -> Void)?
     var onToggleWorm: (() -> Void)?
-    var onToggleRoadTrip: (() -> Void)?
+    var onToggleT3dLight: (() -> Void)?
     var onFullScreen: (() -> Void)?
     var onExit: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
 
     private let hardcoreBtn = GameControlBar.button("sun.max", "Hardcore Lighting")
     private let wormBtn = GameControlBar.button("flashlight.on.fill", "Worm Light")
-    private let roadTripBtn = GameControlBar.button("car.fill", "Road Trip Mode")
+    private let t3dLightBtn = GameControlBar.button("lightbulb.fill", "T3d Boy Light")
     private let fullBtn = GameControlBar.button("arrow.up.left.and.arrow.down.right", "Full Screen")
     private let exitBtn = GameControlBar.button("power", "Exit")
 
@@ -35,7 +35,7 @@ final class GameControlBar: NSView {
         blur.translatesAutoresizingMaskIntoConstraints = false
         addSubview(blur)
 
-        let stack = NSStackView(views: [hardcoreBtn, wormBtn, roadTripBtn, separator(), fullBtn, exitBtn])
+        let stack = NSStackView(views: [hardcoreBtn, wormBtn, t3dLightBtn, separator(), fullBtn, exitBtn])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.alignment = .centerY
@@ -56,7 +56,7 @@ final class GameControlBar: NSView {
 
         hardcoreBtn.target = self; hardcoreBtn.action = #selector(tapHardcore)
         wormBtn.target = self;     wormBtn.action = #selector(tapWorm)
-        roadTripBtn.target = self; roadTripBtn.action = #selector(tapRoadTrip)
+        t3dLightBtn.target = self; t3dLightBtn.action = #selector(tapT3dLight)
         fullBtn.target = self;     fullBtn.action = #selector(tapFull)
         exitBtn.target = self;     exitBtn.action = #selector(tapExit)
         refreshStates()
@@ -91,7 +91,7 @@ final class GameControlBar: NSView {
 
     @objc private func tapHardcore() { onToggleHardcore?(); refreshStates() }
     @objc private func tapWorm() { onToggleWorm?(); refreshStates() }
-    @objc private func tapRoadTrip() { onToggleRoadTrip?(); refreshStates() }
+    @objc private func tapT3dLight() { onToggleT3dLight?(); refreshStates() }
     @objc private func tapFull() { onFullScreen?() }
     @objc private func tapExit() { onExit?() }
 
@@ -104,11 +104,8 @@ final class GameControlBar: NSView {
             ? theme.star : NSColor.white.withAlphaComponent(0.7)
         wormBtn.contentTintColor = WormLight.isEnabled
             ? theme.warm : NSColor.white.withAlphaComponent(0.7)
-        roadTripBtn.contentTintColor = RoadTripLighting.isEnabled
+        t3dLightBtn.contentTintColor = T3dBoyLight.isEnabled
             ? theme.cool : NSColor.white.withAlphaComponent(0.7)
-        // Road Trip Mode forces the worm light on and locks it.
-        wormBtn.isEnabled = !RoadTripLighting.isEnabled
-        wormBtn.alphaValue = RoadTripLighting.isEnabled ? 0.4 : 1
     }
 
     func setFullScreen(_ on: Bool) {

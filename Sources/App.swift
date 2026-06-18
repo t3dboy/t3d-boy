@@ -330,11 +330,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(GameWindowController.toggleWormLight(_:)), keyEquivalent: "l")
         wormItem.keyEquivalentModifierMask = [.command, .control]
         gameMenu.addItem(wormItem)
-        let roadTripItem = NSMenuItem(
-            title: "Road Trip Mode",
-            action: #selector(GameWindowController.toggleRoadTripMode(_:)), keyEquivalent: "b")
-        roadTripItem.keyEquivalentModifierMask = [.command, .control]
-        gameMenu.addItem(roadTripItem)
+        let t3dLightItem = NSMenuItem(
+            title: "T3d Boy Light",
+            action: #selector(GameWindowController.toggleT3dBoyLight(_:)), keyEquivalent: "b")
+        t3dLightItem.keyEquivalentModifierMask = [.command, .control]
+        gameMenu.addItem(t3dLightItem)
         gameMenu.addItem(.separator())
         let saveItem = NSMenuItem(title: "Save State", action: nil, keyEquivalent: "")
         let saveSub = NSMenu(title: "Save State")

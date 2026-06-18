@@ -129,12 +129,11 @@ Effects**.
   LCD's pixel persistence ("ghosting"). Games that faked transparency by flickering
   pixels every other frame (e.g. some attract-mode demos) render as the intended steady,
   semi-transparent image instead of harsh strobing. On by default.
-- **Road Trip Mode** — *"Lighting from the back seat of your parents car at night as you
-  pass street lights."* The screen falls dark, and the only light is the glare of
-  streetlights — soft rounded pools that sweep down across the screen on random angles,
-  one after another with dark gaps between. It's deliberately hard to see, so turning it
-  on also switches **Worm Light** on (and locks it) to give you something to read the
-  screen by; turn Road Trip Mode off to unlock the Worm Light again.
+- **T3d Boy Light** (⌃⌘B) — *"Only popular in Japan, an electroluminescent teal blue
+  glowing display."* Recreates the **Game Boy Light**'s EL backlight: the screen glows an
+  even teal/cyan-green (recolouring the picture while keeping its light/dark detail, so
+  games stay readable), brightest in the centre and falling off to a gently darker teal at
+  the edges — the slightly uneven look of the real panel.
 
 ### Hardcore Lighting — supported devices
 
@@ -151,9 +150,9 @@ sensor** drives, so it's only offered where that reading is available:
 
 On an unsupported setup the option is shown but disabled, with a subtle **"Not compatible
 with this device"** note under its description, so it's clear *why* it's unavailable
-rather than just missing. (For the dark-room look without a sensor, use **Worm Light** or
-**Road Trip Mode** instead.) If you connect or disconnect a capable display, reopen the
-window and the option updates.
+rather than just missing. (For the dark-room look without a sensor, use **Worm Light**
+instead.) If you connect or disconnect a capable display, reopen the window and the
+option updates.
 
 ---
 
@@ -265,9 +264,9 @@ Open with **⌘,**. The sidebar groups settings into three sections:
 - *Notifications* — play a sound on unlock; unlock volume; notification position.
 
 **Screen Effects**
-- Hardcore Lighting, Worm Light, T3d LCD Real Feel™, Road Trip Mode (each with a one-line
+- Hardcore Lighting, Worm Light, T3d LCD Real Feel™, T3d Boy Light (each with a one-line
   description). Hardcore Lighting shows "Not compatible with this device" where the Mac
-  has no ambient-light reading; Worm Light is locked on while Road Trip Mode is active.
+  has no ambient-light reading.
 
 **Appearance**
 - *Theme* — Classic / Pistachio / Engineer / Liquid Glass.
@@ -290,7 +289,7 @@ Open with **⌘,**. The sidebar groups settings into three sections:
 | Load state (slots 1–5) | ⇧⌘1 – ⇧⌘5 |
 | Hardcore Lighting | ⌃⌘H |
 | Worm Light | ⌃⌘L |
-| Road Trip Mode | ⌃⌘B |
+| T3d Boy Light | ⌃⌘B |
 | Toggle Dark Mode | ⇧⌘D |
 
 ---
@@ -306,10 +305,8 @@ Open with **⌘,**. The sidebar groups settings into three sections:
   in the library to re-aim it.
 - **Hardcore Lighting says "Not compatible with this device".** Your Mac has no ambient
   light reading (e.g. a desktop Mac with a plain monitor). See
-  [supported devices](#hardcore-lighting--supported-devices). Use Worm Light or Road Trip
-  Mode for a dark-room feel instead.
-- **Can't turn Worm Light off.** It's locked on while **Road Trip Mode** is active — turn
-  Road Trip Mode off first.
+  [supported devices](#hardcore-lighting--supported-devices). Use Worm Light for a
+  dark-room feel instead.
 - **Can't load a save state.** Hardcore mode blocks save-state loading; turn it off in
   Preferences ▸ Achievements, or accept the "disable hardcore for this session" prompt.
 - **Installing the app** (first-launch security warning) and **supplying ROMs** are

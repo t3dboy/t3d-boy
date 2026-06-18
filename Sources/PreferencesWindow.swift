@@ -66,7 +66,7 @@ final class PreferencesWindowController: NSWindowController {
     private let hcLightingToggle = SettingToggle()
     private let wormToggle = SettingToggle()
     private let lcdToggle = SettingToggle()
-    private let roadTripToggle = SettingToggle()
+    private let t3dLightToggle = SettingToggle()
     // Appearance
     private var themeRadios: [NSButton] = []
     private let darkModeToggle = SettingToggle()
@@ -145,8 +145,8 @@ final class PreferencesWindowController: NSWindowController {
             wormRowView,
             toggleRow("T3d LCD Real Feel™", lcdToggle,
                       subtitle: "Faithfully emulates an old LCD's pixel persistence"),
-            toggleRow("Road Trip Mode", roadTripToggle,
-                      subtitle: "Lighting from the back seat of your parents car at night as you pass street lights"),
+            toggleRow("T3d Boy Light", t3dLightToggle,
+                      subtitle: "Only popular in Japan, an electroluminescent teal blue glowing display"),
         ])
         let darkRow = toggleRow("Dark mode", darkModeToggle,
                                 subtitle: theme.forcedAppearance != nil
@@ -248,7 +248,7 @@ final class PreferencesWindowController: NSWindowController {
         hcLightingToggle.onToggle = { HardcoreLighting.isEnabled = $0 }
         wormToggle.onToggle = { WormLight.isEnabled = $0 }
         lcdToggle.onToggle = { LCDGhosting.isEnabled = $0 }
-        roadTripToggle.onToggle = { RoadTripLighting.isEnabled = $0 }
+        t3dLightToggle.onToggle = { T3dBoyLight.isEnabled = $0 }
         darkModeToggle.onToggle = { (NSApp.delegate as? AppDelegate)?.setAppearance(dark: $0) }
         fpsToggle.onToggle = { RASettings.showFPS = $0 }
         updateToggle.onToggle = { UpdateChecker.autoCheckEnabled = $0 }
@@ -418,11 +418,7 @@ final class PreferencesWindowController: NSWindowController {
         hcLightingToggle.isOn = HardcoreLighting.isEnabled
         wormToggle.isOn = WormLight.isEnabled
         lcdToggle.isOn = LCDGhosting.isEnabled
-        roadTripToggle.isOn = RoadTripLighting.isEnabled
-        // Road Trip Mode forces the worm light on and locks it.
-        let wormLocked = RoadTripLighting.isEnabled
-        wormToggle.isEnabled = !wormLocked
-        wormRow?.alphaValue = wormLocked ? 0.4 : 1
+        t3dLightToggle.isOn = T3dBoyLight.isEnabled
     }
 
     /// Keep the dark-mode toggle in step with the app's current appearance. Skinned

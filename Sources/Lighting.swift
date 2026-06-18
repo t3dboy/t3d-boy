@@ -150,120 +150,108 @@ enum LCDGhosting {
     }
 }
 
-// Road Trip Mode — the late-night car ride. The cabin is dark and the game is hard to
-// make out; the only real light is the glare of streetlights as you drive past them —
-// each a soft rounded pool of light that sweeps across the screen on its own angle, swells
-// as you pass beneath the lamp, then slides away into darkness. The worm light still helps
-// a little. This effect is time-varying, so ScreenEffects drives an animation timer.
-enum RoadTripLighting {
-    private static let key = "roadTripMode"
+// T3d Boy Light — mimics the Game Boy Light's electroluminescent backlight: the screen
+// glows an even teal/cyan-green, the way that indigo-gold console lit its panel. We recolour
+// the emulator picture to the GB Light teal (preserving each pixel's light/dark structure,
+// so the image still reads) and lift its brightness a touch to read as *backlit* rather
+// than reflective. Sampled from the real console's lit screen (~teal-turquoise).
+enum T3dBoyLight {
+    private static let key = "t3dBoyLight"
 
     static var isEnabled: Bool {
         get { UserDefaults.standard.bool(forKey: key) }
         set {
             UserDefaults.standard.set(newValue, forKey: key)
-            // Road Trip looks best with the worm light to read the screen by, so turning
-            // it on forces the worm light on (and the UI locks the worm light meanwhile).
-            if newValue { WormLight.isEnabled = true }
             NotificationCenter.default.post(name: .screenEffectsChanged, object: nil)
         }
     }
 
-    /// Baseline cabin illumination between streetlights — dark, but not pitch black,
-    /// so the game is faintly visible (challenging, as asked).
-    static let baseAmbient: Float = 0.24
+    /// The EL backlight teal — recolours the screen (hue/saturation) via a colour blend.
+    static let tint = NSColor(srgbRed: 0.13, green: 0.80, blue: 0.76, alpha: 1)
+    /// A soft teal lift screen-blended over the picture so it glows like a backlight.
+    static let glow = NSColor(srgbRed: 0.20, green: 0.92, blue: 0.90, alpha: 0.22)
+    /// The multiply colour at the screen edge — a deeper teal that darkens the corners
+    /// (centre stays white = unchanged), for the EL panel's gently uneven glow.
+    static let vignetteEdge = NSColor(srgbRed: 0.50, green: 0.70, blue: 0.69, alpha: 1)
 }
 
-// A single multiplicative "light map" over the host layer (emulator view or
-// library art view). visible = pixels × light, where light = ambient (lowered
-// by Hardcore) plus the warm worm-light pool plus Road Trip Mode's passing
-// streetlights. Multiply can't exceed the pixel, so it never blows out to white —
-// the lights *reveal and warm* the screen rather than painting over it. Shared so the
-// in-library preview matches gameplay exactly.
+// Screen effects layered over the host layer (emulator view or library art preview),
+// shared so the in-library preview matches gameplay exactly:
+//   • a multiplicative "light map" (`lightLayer`) for Hardcore dimming + the warm worm-light
+//     pool — multiply can't exceed the pixel, so lights *reveal* rather than paint over;
+//   • a teal recolour + glow (`tealLayer` / `glowLayer`) for T3d Boy Light's EL backlight.
 final class ScreenEffects {
-    private let lightLayer = CALayer()
+    private let lightLayer = CALayer()           // Hardcore dim + worm pool (multiply)
+    private let glowLayer = CALayer()            // T3d Boy Light brightness lift (screen)
+    private let tealLayer = CALayer()            // T3d Boy Light recolour (colour blend)
+    private let vignetteLayer = CAGradientLayer() // T3d Boy Light edge darkening (multiply)
     private var lastDim: Float = 0
     private var lastWorm = false
-    private var timer: Timer?
-
-    // Road Trip Mode: a rolling list of streetlights, each a rounded pool of light that
-    // travels across the screen from `entry` to `exit` (random angles, so lights arrive
-    // from different directions as you pass them).
-    private struct Streetlight {
-        var start: CFTimeInterval
-        var duration: Double
-        var peak: Float
-        var ex0: Float, ey0: Float // entry point (just off-screen)
-        var ex1: Float, ey1: Float // exit point (off the far side)
-    }
-    private var lights: [Streetlight] = []
-    private var nextSpawn: CFTimeInterval = 0
-    private var carBuf = [Float](repeating: 0, count: WormLight.w * WormLight.h)
 
     init(host: CALayer) {
         lightLayer.magnificationFilter = .linear // smooth light, not pixel art
         lightLayer.compositingFilter = "multiplyBlendMode"
         lightLayer.isHidden = true
         host.addSublayer(lightLayer)
+
+        // T3d Boy Light: glow (screen-blend) under the recolour (colour-blend), with a
+        // subtle radial vignette (multiply) on top that dims the edges toward a deeper
+        // teal — the slightly uneven look of the real EL panel.
+        glowLayer.compositingFilter = "screenBlendMode"
+        glowLayer.backgroundColor = T3dBoyLight.glow.cgColor
+        glowLayer.isHidden = true
+        host.addSublayer(glowLayer)
+
+        tealLayer.compositingFilter = "colorBlendMode"
+        tealLayer.backgroundColor = T3dBoyLight.tint.cgColor
+        tealLayer.isHidden = true
+        host.addSublayer(tealLayer)
+
+        vignetteLayer.type = .radial
+        vignetteLayer.colors = [NSColor.white.cgColor, T3dBoyLight.vignetteEdge.cgColor]
+        vignetteLayer.locations = [0.42, 1.0]              // clean centre, darkening to the edge
+        vignetteLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
+        vignetteLayer.endPoint = CGPoint(x: 1, y: 1)
+        vignetteLayer.compositingFilter = "multiplyBlendMode"
+        vignetteLayer.isHidden = true
+        host.addSublayer(vignetteLayer)
     }
 
-    deinit { timer?.invalidate() }
-
-    func layout(_ bounds: CGRect) { lightLayer.frame = bounds }
+    func layout(_ bounds: CGRect) {
+        lightLayer.frame = bounds
+        glowLayer.frame = bounds
+        tealLayer.frame = bounds
+        vignetteLayer.frame = bounds
+    }
 
     func apply(dimOpacity: Float, wormOn: Bool, animated: Bool = false) {
         lastDim = dimOpacity
         lastWorm = wormOn
-        let car = RoadTripLighting.isEnabled
+        let backlight = T3dBoyLight.isEnabled
 
-        // Nothing to do → leave the screen untouched
-        if dimOpacity <= 0.001 && !wormOn && !car {
-            lightLayer.isHidden = true
-            stopAnimating()
-            return
-        }
-        lightLayer.isHidden = false
-        if car { startAnimating() } else { stopAnimating() }
-        render()
+        let needMap = dimOpacity > 0.001 || wormOn
+        lightLayer.isHidden = !needMap
+        if needMap { render() }
+
+        glowLayer.isHidden = !backlight
+        tealLayer.isHidden = !backlight
+        vignetteLayer.isHidden = !backlight
     }
 
-    // MARK: - Animation driver (only running while Road Trip Mode is on)
-
-    private func startAnimating() {
-        guard timer == nil else { return }
-        nextSpawn = CACurrentMediaTime() + Double.random(in: 0.2 ... 1.0)
-        let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in self?.render() }
-        RunLoop.main.add(t, forMode: .common) // keep sweeping during menu tracking / resize
-        timer = t
-    }
-
-    private func stopAnimating() {
-        timer?.invalidate()
-        timer = nil
-        lights.removeAll()
-    }
-
-    // MARK: - Render the current light map
+    // MARK: - Render the multiplicative light map (Hardcore dim + worm pool)
 
     private func render() {
-        let car = RoadTripLighting.isEnabled
         let W = WormLight.w, H = WormLight.h
-        // Road Trip Mode imposes its own dark cabin; otherwise ambient comes from Hardcore.
-        let ambient: Float = car ? RoadTripLighting.baseAmbient : max(0, min(1, 1 - lastDim))
-
-        for i in carBuf.indices { carBuf[i] = 0 }
-        if car { accumulateStreetlights(into: &carBuf, W: W, H: H) }
-
+        let ambient: Float = max(0, min(1, 1 - lastDim))
         let wormLift: Float = 0.85
         var px = [UInt32](repeating: 0, count: W * H)
         for i in 0 ..< px.count {
             let s = lastWorm ? WormLight.strength[i] : 0
-            let street = min(1, carBuf[i])
-            let level = min(1, ambient + street + s * wormLift)
-            // Streetlights read as a slightly warm white; the worm pool an amber cast.
+            let level = min(1, ambient + s * wormLift)
+            // The worm pool casts a warm amber light.
             let r = level
-            let g = level * (1 - 0.05 * street - 0.12 * s)
-            let b = level * (1 - 0.18 * street - 0.40 * s)
+            let g = level * (1 - 0.12 * s)
+            let b = level * (1 - 0.40 * s)
             px[i] = 0xFF00_0000
                 | (UInt32(max(0, min(255, r * 255))) << 16)
                 | (UInt32(max(0, min(255, g * 255))) << 8)
@@ -273,53 +261,5 @@ final class ScreenEffects {
         CATransaction.setDisableActions(true)
         lightLayer.contents = makeImage(from: px)
         CATransaction.commit()
-    }
-
-    /// Advance the streetlight simulation and add each light's rounded pool to `buf`.
-    private func accumulateStreetlights(into buf: inout [Float], W: Int, H: Int) {
-        let now = CACurrentMediaTime()
-        if now >= nextSpawn {
-            // Always enter from above and exit below (a streetlight passing overhead),
-            // but vary the horizontal entry/exit so the pool crosses on a random angle.
-            lights.append(Streetlight(
-                start: now,
-                duration: Double.random(in: 0.9 ... 1.7),
-                peak: Float.random(in: 0.7 ... 1.0),
-                ex0: Float.random(in: -0.35 ... 1.35), ey0: -0.35,
-                ex1: Float.random(in: -0.35 ... 1.35), ey1: 1.35))
-            nextSpawn = now + Double.random(in: 0.5 ... 3.0) // random gaps between lamps
-        }
-        lights.removeAll { now - $0.start > $0.duration }
-
-        let aspect = Float(W) / Float(H) // keep the pool round on a 10:9 screen
-        let haloR2: Float = 0.62 * 0.62
-        let coreR2: Float = 0.22 * 0.22
-        let elong: Float = 1.45         // stretch slightly along travel → a soft motion streak
-
-        for light in lights {
-            let u = Float((now - light.start) / light.duration) // 0…1 through the pass
-            let amp = light.peak * sinf(Float.pi * u)           // swells then fades
-            if amp <= 0.001 { continue }
-            let cx = light.ex0 + (light.ex1 - light.ex0) * u    // pool centre, this instant
-            let cy = light.ey0 + (light.ey1 - light.ey0) * u
-            var dirx = (light.ex1 - light.ex0) * aspect, diry = light.ey1 - light.ey0
-            let dl = (dirx * dirx + diry * diry).squareRoot()
-            if dl > 0.0001 { dirx /= dl; diry /= dl } else { dirx = 0; diry = 1 }
-
-            for r in 0 ..< H {
-                let dyh = Float(r) / Float(H) - cy
-                let off = r * W
-                for c in 0 ..< W {
-                    let dxh = (Float(c) / Float(W) - cx) * aspect
-                    // rotate into the pool's travel frame and squash along it for the streak
-                    let along = (dxh * dirx + dyh * diry) / elong
-                    let perp = -dxh * diry + dyh * dirx
-                    let d2 = along * along + perp * perp
-                    let halo = max(0, 1 - d2 / haloR2)
-                    let core = max(0, 1 - d2 / coreR2)
-                    buf[off + c] += amp * (0.55 * halo * halo + 0.9 * core * core)
-                }
-            }
-        }
     }
 }

@@ -40,8 +40,8 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   - *Worm Light* is a warm, aimable '90s clip-on light you drag to angle (⌃⌘L)
   - *T3d LCD Real Feel™* blends frames to recreate LCD pixel persistence, so games that
     faked transparency by flickering render as intended instead of strobing
-  - *Road Trip Mode* — a dark late-night car ride lit only by streetlights sweeping past
-    on random angles; turns Worm Light on so you can still read the screen
+  - *T3d Boy Light* — the Game Boy Light's electroluminescent teal-blue backlight: the
+    screen glows an even teal with a gently darker vignette toward the edges (⌃⌘B)
 - **ROM library** with auto-generated box art (each game's title screen, captured by
   booting it headlessly), Game Boy / Color / Favourites tabs, sorting by popularity,
   name or play time, and per-game play-time tracking

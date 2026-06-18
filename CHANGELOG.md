@@ -2,6 +2,20 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [2.3.0] — 2026-06-18
+
+### Added
+- **T3d Boy Light** — a new screen effect (⌃⌘B): *"Only popular in Japan, an
+  electroluminescent teal blue glowing display."* It recreates the **Game Boy Light**'s
+  EL backlight — the screen glows an even teal/cyan-green, recolouring the picture while
+  keeping its light/dark detail so games stay readable, brightest in the centre and
+  falling off to a gently darker teal vignette at the edges, like the real panel.
+
+### Removed
+- **Road Trip Mode** — removed. Due to just not being very good and generally being a bad
+  idea from inception. T3d Boy Light takes its place in the effects panel, the in-game
+  control bar, and on ⌃⌘B.
+
 ## [2.2.0] — 2026-06-16
 
 ### Added
