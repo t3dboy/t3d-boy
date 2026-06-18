@@ -253,6 +253,9 @@ final class APU {
 
     var s = APUState()
     let ring = AudioRingBuffer()
+    /// Fired when a channel is (re)triggered — channel 0…3 = pulse1/pulse2/wave/noise.
+    /// Used by the chiptune sound-harvester to capture a ROM's instrument patches.
+    var onTrigger: ((Int) -> Void)?
     private var pending: [Float] = []
     private var capL: Float = 0, capR: Float = 0 // high-pass filter state
 
@@ -425,7 +428,7 @@ final class APU {
         case 0xFF14:
             s.ch1.freq = (s.ch1.freq & 0xFF) | (Int(v & 7) << 8)
             s.ch1.lengthEnable = v & 0x40 != 0
-            if v & 0x80 != 0 { s.ch1.trigger() }
+            if v & 0x80 != 0 { s.ch1.trigger(); onTrigger?(0) }
 
         case 0xFF16:
             s.ch2.duty = Int(v >> 6)
@@ -441,7 +444,7 @@ final class APU {
         case 0xFF19:
             s.ch2.freq = (s.ch2.freq & 0xFF) | (Int(v & 7) << 8)
             s.ch2.lengthEnable = v & 0x40 != 0
-            if v & 0x80 != 0 { s.ch2.trigger() }
+            if v & 0x80 != 0 { s.ch2.trigger(); onTrigger?(1) }
 
         case 0xFF1A:
             s.wave.dacOn = v & 0x80 != 0
@@ -455,7 +458,7 @@ final class APU {
         case 0xFF1E:
             s.wave.freq = (s.wave.freq & 0xFF) | (Int(v & 7) << 8)
             s.wave.lengthEnable = v & 0x40 != 0
-            if v & 0x80 != 0 { s.wave.trigger() }
+            if v & 0x80 != 0 { s.wave.trigger(); onTrigger?(2) }
 
         case 0xFF20:
             s.noise.lengthCounter = 64 - Int(v & 0x3F)
@@ -471,7 +474,7 @@ final class APU {
             s.noise.divCode = Int(v & 7)
         case 0xFF23:
             s.noise.lengthEnable = v & 0x40 != 0
-            if v & 0x80 != 0 { s.noise.trigger() }
+            if v & 0x80 != 0 { s.noise.trigger(); onTrigger?(3) }
 
         case 0xFF24: s.nr50 = v
         case 0xFF25: s.nr51 = v

@@ -68,6 +68,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
+    /// Quit when the last window closes (clicking the red close button) instead of staying
+    /// alive in the Dock with no windows.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
     func application(_ application: NSApplication, open urls: [URL]) {
         if let url = urls.first { play(url: url) }
     }

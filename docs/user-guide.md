@@ -12,6 +12,7 @@ Game Boy Color emulator.
 - [Save states & pause](#save-states--pause)
 - [Display effects](#display-effects)
 - [Themes](#themes)
+- [T3d Tunes — the sound chip as an instrument](#t3d-tunes--the-sound-chip-as-an-instrument)
 - [RetroAchievements](#retroachievements)
 - [Accessibility](#accessibility)
 - [Software updates](#software-updates)
@@ -205,6 +206,32 @@ the nature of real glass.)
 
 > **Switching themes keeps you in place** — if you change theme from the Appearance tab,
 > Preferences stays on the Appearance tab afterwards.
+
+---
+
+## T3d Tunes — the sound chip as an instrument
+
+T3d Tunes turns the Game Boy's sound hardware into a looping chiptune instrument, **seeded
+with the sounds of the ROM you've selected**. Open it from the full-width **♪ T3d Tunes**
+bar along the bottom of the library — it slides up, growing the window taller.
+
+- **It samples the selected game.** On opening (and whenever you pick another game) T3d
+  Tunes briefly runs that ROM and captures the actual sounds it uses — pulse leads, basses,
+  the wave channel's custom waveforms, noise percussion.
+- **Four lanes = the four Game Boy channels** — Pulse 1, Pulse 2, Wave, Noise. Each lane
+  has a **dropdown** to choose which of that channel's captured sounds it plays, a **16-step
+  grid** (tap to lay the sound into the loop), a **pitch knob**, and a **mute**.
+- **Transport** — Play/Stop and a BPM control. **Clear** empties the loop and stops it.
+- **Pad bank** — the row of coloured pads is a live soundboard; tap one to play that sound
+  over the loop.
+- **Browse while it plays** — select another game and the loop keeps running with that
+  game's sounds swapped in, so you can hear your pattern in any cartridge's voice.
+
+Notes are gated to a short one-shot so the detached chip doesn't drone. T3d Tunes adopts the
+active theme (it looks most at home in Engineer, and goes glassy in Liquid Glass).
+
+For a full explanation of how Game Boy audio works and how T3d Tunes maps the chip onto the
+looper, see **[docs/sound-chip.md](sound-chip.md)**.
 
 ---
 

@@ -104,6 +104,15 @@ sound still plays.
 
 ---
 
+## T3d Tunes
+
+The **T3d Tunes** bar that opens the instrument is a standard keyboard- and VoiceOver-
+accessible button. The looper grid itself — the step cells, rotary knobs and pads — is
+currently a **mouse/pointer-oriented** surface and isn't yet exposed to VoiceOver or full
+keyboard navigation; making the sequencer playable without a pointer is a planned follow-up.
+
+---
+
 ## A note on the game screen
 
 The emulated game picture is, by nature, a visual medium — a Game Boy game's screen

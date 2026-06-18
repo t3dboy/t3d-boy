@@ -519,6 +519,22 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private var drawerOpen = false
     private let drawerWidth: CGFloat = 360
     private var drawerWidthConstraint: NSLayoutConstraint!
+
+    // T3d Tunes — the bottom drawer (the sound chip as an instrument). Opening it grows
+    // the window taller downward (like the achievements drawer grows it wider); open both
+    // and it's taller still, with the looper spreading into the extra width.
+    private let chiptunesDrawer = ChiptunesDrawer()
+    private var chiptunesOpen = false
+    private var chiptunesHeightConstraint: NSLayoutConstraint!
+    private let chiptunesBaseHeight: CGFloat = 300
+    private let chiptunesBonusHeight: CGFloat = 60 // extra room when the achievements drawer is open
+    private var barHeight: CGFloat { ChiptunesDrawer.barHeight } // the always-visible launcher bar
+    /// Drawer height when closed (just the bar) and open (bar + instrument).
+    private var chiptunesClosedHeight: CGFloat { barHeight }
+    private var chiptunesOpenHeight: CGFloat { barHeight + chiptunesBaseHeight + (drawerOpen ? chiptunesBonusHeight : 0) }
+    /// The library body sits above the chiptunes drawer; bottom-anchored chrome hangs off
+    /// the drawer's top edge (0-height when closed, so the layout is unchanged).
+    private var bodyBottom: NSLayoutYAxisAnchor { chiptunesDrawer.topAnchor }
     private var previewTimer: Timer?
     private var previewedURL: URL?
     private var raIdleTimer: Timer?
@@ -536,12 +552,15 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     init() {
         let engineer = ThemeManager.shared.current.id == "engineer"
+        // The always-visible T3d Tunes bar sits at the bottom, so add its height to keep
+        // the library's own space unchanged.
+        let bar = ChiptunesDrawer.barHeight
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: engineer ? 740 : 600),
+            contentRect: NSRect(x: 0, y: 0, width: 880, height: (engineer ? 740 : 600) + bar),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "T3d Boy — ROM Library"
-        window.minSize = NSSize(width: 760, height: engineer ? 700 : 540)
+        window.minSize = NSSize(width: 760, height: (engineer ? 700 : 540) + bar)
         super.init(window: window)
         window.delegate = self
         // Don't let macOS restore a stale saved frame over our themed size — the Engineer
@@ -573,6 +592,19 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private func buildUI() {
         guard let content = window?.contentView else { return }
         content.wantsLayer = true
+
+        // T3d Tunes drawer pinned to the bottom, 0-height when closed (so the layout
+        // above is unchanged); the library's bottom chrome hangs off its top edge
+        // (`bodyBottom`), so opening it grows the window taller downward.
+        content.addSubview(chiptunesDrawer)
+        chiptunesDrawer.onToggle = { [weak self] in self?.toggleChiptunes() }
+        chiptunesHeightConstraint = chiptunesDrawer.heightAnchor.constraint(equalToConstant: chiptunesClosedHeight)
+        NSLayoutConstraint.activate([
+            chiptunesDrawer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            chiptunesDrawer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            chiptunesDrawer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            chiptunesHeightConstraint,
+        ])
 
         // Warm list-pane background sits behind everything (skinned themes only).
         listPanel.wantsLayer = true
@@ -704,7 +736,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             folderBar.leadingAnchor.constraint(equalTo: tabs.leadingAnchor),
             folderBar.widthAnchor.constraint(equalTo: tabs.widthAnchor),
             folderBar.heightAnchor.constraint(equalToConstant: 30),
-            folderBar.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -bottomInset),
+            folderBar.bottomAnchor.constraint(equalTo: bodyBottom, constant: -bottomInset),
 
             folderBarLabel.leadingAnchor.constraint(equalTo: folderBar.leadingAnchor, constant: 10),
             folderBarLabel.centerYAnchor.constraint(equalTo: folderBar.centerYAnchor),
@@ -721,7 +753,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             // List-pane background spans the whole left column behind the list chrome.
             listPanel.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             listPanel.topAnchor.constraint(equalTo: content.topAnchor),
-            listPanel.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            listPanel.bottomAnchor.constraint(equalTo: bodyBottom),
             listPanel.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
 
             rightArea.leadingAnchor.constraint(equalTo: scroll.trailingAnchor),
@@ -730,18 +762,20 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             // Drawer fills the space to the right of the detail pane; 0-wide when closed.
             achievementsDrawer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             achievementsDrawer.topAnchor.constraint(equalTo: content.topAnchor),
-            achievementsDrawer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            achievementsDrawer.bottomAnchor.constraint(equalTo: bodyBottom),
 
-            // Chevron handle sits on the boundary between the detail pane and drawer.
+            // Chevron handle sits on the boundary between the detail pane and drawer. Pin
+            // its centre to the library body (the achievements drawer spans top→bodyBottom),
+            // not the whole window — so it doesn't drift when the chiptunes drawer opens.
             drawerHandle.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -2),
-            drawerHandle.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            drawerHandle.centerYAnchor.constraint(equalTo: achievementsDrawer.centerYAnchor),
             drawerHandle.widthAnchor.constraint(equalToConstant: 24),
             drawerHandle.heightAnchor.constraint(equalToConstant: 70),
 
             // Lighting housing sits flush at the bottom of the detail column
             effectsHousing.leadingAnchor.constraint(equalTo: rightArea.leadingAnchor, constant: 24),
             effectsHousing.trailingAnchor.constraint(equalTo: rightArea.trailingAnchor, constant: -24),
-            effectsHousing.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -(bottomInset + 2)),
+            effectsHousing.bottomAnchor.constraint(equalTo: bodyBottom, constant: -(bottomInset + 2)),
 
             playButton.bottomAnchor.constraint(equalTo: effectsHousing.topAnchor, constant: -16),
             playButton.centerXAnchor.constraint(equalTo: rightArea.centerXAnchor, constant: -55),
@@ -775,6 +809,10 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
         if isEngineer { addEngineerChrome(content) }
         if isLiquidGlass { applyGlassBackdrop() }
+
+        // Keep the chiptunes drawer on top of any theme chrome (e.g. the Engineer trim) so
+        // the bar stays clickable and the drawer covers cleanly.
+        content.addSubview(chiptunesDrawer, positioned: .above, relativeTo: nil)
 
         styleChrome()
     }
@@ -816,7 +854,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
             trim.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             trim.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            trim.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            trim.bottomAnchor.constraint(equalTo: bodyBottom),
 
             labelRow.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 12),
             labelRow.topAnchor.constraint(equalTo: plate.bottomAnchor, constant: 10),
@@ -1285,6 +1323,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         updateFavButton(for: rom)
         updateStats(for: rom)
         updateT3dLightAvailability(for: rom)
+        chiptunesDrawer.selectedROM = rom
         artView.image = nil
         if DemoMode.isActive {
             artView.image = DemoMode.art // the T3d Boy boot screen as box art
@@ -1362,6 +1401,48 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     // MARK: - Achievements drawer
 
+    // MARK: - T3d Tunes drawer
+
+    private func toggleChiptunes() { setChiptunes(open: !chiptunesOpen, animated: true) }
+
+    private func setChiptunes(open: Bool, animated: Bool) {
+        guard open != chiptunesOpen, let window else { return }
+        chiptunesOpen = open
+        chiptunesDrawer.setExpanded(open)
+        let target: CGFloat = open ? chiptunesOpenHeight : chiptunesClosedHeight
+
+        var f = window.frame
+        let delta = target - chiptunesHeightConstraint.constant
+        f.size.height += delta
+        f.origin.y -= delta // keep the top edge fixed; the window grows downward
+        if open, let vis = window.screen?.visibleFrame, f.origin.y < vis.minY {
+            f.origin.y = vis.minY // stay on-screen if it would run off the bottom
+        }
+
+        if animated {
+            NSAnimationContext.runAnimationGroup { ctx in
+                ctx.duration = 0.22
+                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                chiptunesHeightConstraint.animator().constant = target
+                window.animator().setFrame(f, display: true)
+            }
+        } else {
+            chiptunesHeightConstraint.constant = target
+            window.setFrame(f, display: true)
+        }
+
+        if open {
+            chiptunesDrawer.activate(rom: currentSelectedROM())
+        } else {
+            chiptunesDrawer.suspend()
+        }
+    }
+
+    private func currentSelectedROM() -> URL? {
+        guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return nil }
+        return roms[tableView.selectedRow]
+    }
+
     private func toggleDrawer() { setDrawer(open: !drawerOpen, animated: true) }
 
     private func setDrawer(open: Bool, animated: Bool) {
@@ -1374,16 +1455,27 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         if open, let vis = window.screen?.visibleFrame, f.maxX > vis.maxX {
             f.origin.x = max(vis.minX, vis.maxX - f.size.width) // slide left to stay on-screen
         }
+        // If the chiptunes drawer is open, it grows taller when the achievements drawer is —
+        // adjust its height and the window together for the "even larger" feel.
+        var chipTarget = chiptunesHeightConstraint.constant
+        if chiptunesOpen {
+            chipTarget = barHeight + chiptunesBaseHeight + (open ? chiptunesBonusHeight : 0)
+            let hDelta = chipTarget - chiptunesHeightConstraint.constant
+            f.size.height += hDelta
+            f.origin.y -= hDelta
+        }
 
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 drawerWidthConstraint.animator().constant = open ? drawerWidth : 0
+                if chiptunesOpen { chiptunesHeightConstraint.animator().constant = chipTarget }
                 window.animator().setFrame(f, display: true)
             }
         } else {
             drawerWidthConstraint.constant = open ? drawerWidth : 0
+            if chiptunesOpen { chiptunesHeightConstraint.constant = chipTarget }
             window.setFrame(f, display: true)
         }
 
@@ -1459,7 +1551,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         // force the intended size on first appearance, then leave it to the user.
         if !hasSizedOnce, let window {
             hasSizedOnce = true
-            let target = NSSize(width: 880, height: isEngineer ? 740 : 600)
+            let target = NSSize(width: 880, height: (isEngineer ? 740 : 600) + chiptunesClosedHeight)
             window.setContentSize(target)
             window.center()
             DispatchQueue.main.async { [weak window] in
@@ -1482,6 +1574,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     func windowWillClose(_ notification: Notification) {
         previewTimer?.invalidate()
         stopIdlePump()
+        chiptunesDrawer.suspend() // stop the chiptune audio engine
         if Achievements.shared.isOwner(self) {
             Achievements.shared.unloadGame()
             RAMemory.mmu = nil

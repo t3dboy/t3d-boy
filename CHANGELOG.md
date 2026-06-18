@@ -2,6 +2,27 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [3.0.0] — 2026-06-19
+
+A major release built around **T3d Tunes** — the Game Boy's sound chip as a playable
+instrument.
+
+### Added
+- **T3d Tunes** — a looping chiptune synth/soundboard, detached from the emulator. A drawer
+  slides up from the bottom of the library (full-width **T3d Tunes** bar) with a Teenage
+  Engineering-style 16-step looper across the four Game Boy channels (Pulse 1, Pulse 2,
+  Wave, Noise):
+  - **Samples the selected ROM's sounds** — runs the game headlessly and captures the
+    distinct instrument "recipes" it uses (pulse duty + envelope, the wave channel's custom
+    wavetables, noise tones), then offers them per channel.
+  - **Per-channel sound dropdowns** to pick which of the ROM's sounds each lane plays, a
+    step grid, pitch knobs, mute, a live pad soundboard, and transport (play/stop, BPM).
+  - **Browse-to-swap** — selecting another game keeps the loop running and swaps in that
+    game's sounds, so you can audition the whole library musically.
+  - Themed across all four looks (Classic / Pistachio / Engineer / Liquid Glass).
+  - How it works, and a full primer on Game Boy audio:
+    **[docs/sound-chip.md](docs/sound-chip.md)**.
+
 ## [2.3.1] — 2026-06-18
 
 ### Changed

@@ -6,6 +6,17 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
 
 ## Features
 
+- **T3d Tunes — the sound chip as an instrument** — detach the Game Boy's APU from the
+  game and turn it into a looping chiptune machine. A drawer slides up from the bottom
+  with a boutique-synth-style 16-step looper across the GB's four channels (two
+  pulse, wave, noise). The clever part: it **samples the sounds of whatever ROM you've
+  selected** — running it headlessly and capturing the actual duty/envelope, wavetables
+  and noise tones the game uses — then lets you pick those sounds per channel and lay them
+  into a loop. Browse the library and the loop keeps grooving with each game's audio
+  swapped in. See **[docs/sound-chip.md](docs/sound-chip.md)** for how it works.
+
+  ![T3d Tunes — the looping chiptune instrument](tools/screenshot-tunes.png)
+
 - **Four switchable themes** — give the whole app a different personality from
   Preferences ▸ Appearance:
   - **Classic** — clean, system-native macOS (light or dark).

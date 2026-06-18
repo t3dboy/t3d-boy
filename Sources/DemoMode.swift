@@ -47,4 +47,29 @@ enum DemoMode {
 
     /// The settled T3d Boy boot screen, used as every game's box art.
     static let art: CGImage? = makeImage(from: BootScreen.frame(140, cgb: false))
+
+    // MARK: - T3d Tunes demo
+
+    /// Made-up instrument patches for the T3d Tunes looper, so a screenshot shows the
+    /// instrument populated with sounds without harvesting a real ROM.
+    static let tuneSounds: [ChiptunePatch] = [
+        ChiptunePatch(voice: .pulse1, name: "Lead",   duty: 2, envInit: 13, envPeriod: 0),
+        ChiptunePatch(voice: .pulse1, name: "Arp",    duty: 1, envInit: 14, envPeriod: 3),
+        ChiptunePatch(voice: .pulse1, name: "Stab",   duty: 3, envInit: 12, envPeriod: 2),
+        ChiptunePatch(voice: .pulse2, name: "Bass",   duty: 2, envInit: 15, envPeriod: 2),
+        ChiptunePatch(voice: .pulse2, name: "Sub",    duty: 0, envInit: 15, envPeriod: 1),
+        ChiptunePatch(voice: .wave,   name: "Organ",  waveRAM: ChiptunePatch.triangleWave, waveVol: 1),
+        ChiptunePatch(voice: .wave,   name: "Bell",   waveRAM: ChiptunePatch.triangleWave, waveVol: 2),
+        ChiptunePatch(voice: .noise,  name: "Hat",    envInit: 9,  envPeriod: 2, noiseReg: 0x33),
+        ChiptunePatch(voice: .noise,  name: "Snare",  envInit: 13, envPeriod: 4, noiseReg: 0x55),
+        ChiptunePatch(voice: .noise,  name: "Clap",   envInit: 11, envPeriod: 3, noiseReg: 0x44),
+    ]
+
+    /// A nice-looking demo beat: the active step indices per lane (PUL1/PUL2/WAVE/NOIS).
+    static let tunePattern: [[Int]] = [
+        [0, 6, 8, 14],                 // PUL1 lead
+        [0, 4, 8, 12],                 // PUL2 bass
+        [2, 10],                       // WAVE
+        [0, 2, 4, 6, 8, 10, 12, 14],   // NOIS hats
+    ]
 }
