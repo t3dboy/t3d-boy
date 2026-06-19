@@ -13,6 +13,42 @@ import Cocoa
 /// A top-down document view for the drawer's scroll view (NSView is bottom-up by default).
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
 
+/// A very faint live waveform drawn behind the step grid. Its amplitude tracks the actual
+/// output, so the sequencer feels alive — quiet is a near-flat line, and it swells as you
+/// layer more sounds in.
+final class ScopeBackdrop: NSView {
+    weak var engine: ChiptuneEngine?
+    private var timer: Timer?
+    override var isFlipped: Bool { true }
+
+    func start() {
+        guard timer == nil else { return }
+        let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            guard let self, self.window != nil else { return }
+            self.needsDisplay = true
+        }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+    func stop() { timer?.invalidate(); timer = nil; needsDisplay = true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let s = engine?.snapshotScope(), s.count > 1, bounds.width > 1 else { return }
+        let mid = bounds.midY, amp = bounds.height * 0.46
+        let n = s.count
+        let path = NSBezierPath()
+        path.lineWidth = 1.5
+        path.lineCapStyle = .round
+        for i in 0 ..< n {
+            let x = bounds.width * CGFloat(i) / CGFloat(n - 1)
+            let y = mid + CGFloat(max(-1, min(1, s[i]))) * amp
+            if i == 0 { path.move(to: NSPoint(x: x, y: y)) } else { path.line(to: NSPoint(x: x, y: y)) }
+        }
+        theme.accent.withAlphaComponent(0.11).setStroke()
+        path.stroke()
+    }
+}
+
 func voiceColor(_ v: ChipVoice) -> NSColor {
     switch v {
     case .pulse1: return theme.keyCoral
@@ -25,14 +61,37 @@ func voiceColor(_ v: ChipVoice) -> NSColor {
 // MARK: - LED step cell
 
 final class ChipStep: NSView {
-    var on = false { didSet { needsDisplay = true } }
+    var on = false { didSet { needsDisplay = true; if on && !oldValue { pulse() } } }
     var playing = false { didSet { needsDisplay = true } }
     var tint: NSColor = .systemBlue
     var onToggle: (() -> Void)?
+    private let pulseLayer = CALayer()
 
-    override init(frame: NSRect) { super.init(frame: frame); wantsLayer = true }
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        pulseLayer.opacity = 0
+        layer?.addSublayer(pulseLayer)
+    }
     required init?(coder: NSCoder) { fatalError() }
     override func mouseDown(with event: NSEvent) { onToggle?() }
+
+    /// A quick expanding glow when a step is switched on — the "layering in" feedback.
+    private func pulse() {
+        let r = bounds.insetBy(dx: 1.5, dy: 1.5)
+        pulseLayer.frame = r
+        pulseLayer.cornerRadius = theme.toggleSquared ? 2 : 5
+        pulseLayer.backgroundColor = tint.cgColor
+        let scale = CABasicAnimation(keyPath: "transform.scale")
+        scale.fromValue = 1.0; scale.toValue = 1.9
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.6; fade.toValue = 0
+        let group = CAAnimationGroup()
+        group.animations = [scale, fade]
+        group.duration = 0.4
+        group.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        pulseLayer.add(group, forKey: "pulse")
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds.insetBy(dx: 1.5, dy: 1.5)
@@ -410,6 +469,7 @@ final class ChiptunesDrawer: NSView {
     private var featurePanels: [NSView] = []
     private var panelTabs: NSSegmentedControl?
     private weak var contentScroll: NSScrollView?
+    private let scopeBackdrop = ScopeBackdrop()   // faint live waveform behind the grid
     private var recArmedLane: Int? = nil   // step-record: keyboard notes land on this lane
     private var recCursor = 0              // step-record write position
 
@@ -607,6 +667,11 @@ final class ChiptunesDrawer: NSView {
         status.textColor = theme.textFaint
         status.translatesAutoresizingMaskIntoConstraints = false
 
+        // Faint live waveform behind the grid (added first → sits at the back).
+        scopeBackdrop.engine = engine
+        scopeBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        doc.addSubview(scopeBackdrop)
+
         for v in [transport, grid, kbControls, keyboard, tabs, host, status] { doc.addSubview(v) }
         NSLayoutConstraint.activate([
             transport.topAnchor.constraint(equalTo: doc.topAnchor, constant: 14),
@@ -615,6 +680,11 @@ final class ChiptunesDrawer: NSView {
             grid.topAnchor.constraint(equalTo: transport.bottomAnchor, constant: 14),
             grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
             grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
+
+            scopeBackdrop.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
+            scopeBackdrop.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
+            scopeBackdrop.topAnchor.constraint(equalTo: grid.topAnchor, constant: -4),
+            scopeBackdrop.bottomAnchor.constraint(equalTo: grid.bottomAnchor, constant: 4),
 
             kbControls.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 14),
             kbControls.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -924,6 +994,7 @@ final class ChiptunesDrawer: NSView {
         active = true
         engine.startAudioIfNeeded()
         installKeyMonitor()
+        scopeBackdrop.start()
         // Start the drawer scrolled at the top (transport row visible).
         DispatchQueue.main.async { [weak self] in self?.contentScroll?.contentView.scroll(to: .zero) }
         selectedROM = rom               // (active is true, so this kicks off a sample)
@@ -933,6 +1004,7 @@ final class ChiptunesDrawer: NSView {
     /// Close the drawer: stop everything and cancel any pending sample.
     func suspend() {
         active = false
+        scopeBackdrop.stop()
         removeKeyMonitor()
         pendingHarvest?.cancel(); pendingHarvest = nil
         harvestGen += 1 // invalidate any in-flight result
