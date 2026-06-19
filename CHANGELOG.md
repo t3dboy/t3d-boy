@@ -2,6 +2,13 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [3.1.1] — 2026-06-19
+
+### Fixed
+- **The T3d Tunes keyboard no longer triggers the macOS alert beep** when played from the
+  computer keyboard. The key-event monitor wasn't actually consuming mapped keystrokes, so
+  each note also fell through to the system as an unhandled key.
+
 ## [3.1.0] — 2026-06-19
 
 T3d Tunes grows up — a full synth FX rack, per-lane glide, and a playable keyboard.

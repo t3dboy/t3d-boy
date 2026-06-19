@@ -731,7 +731,10 @@ final class ChiptunesDrawer: NSView {
     private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
-            self?.handleTypedKey(event) ?? event
+            // NB: optional-chaining flattens, so don't write `self?.handleTypedKey(event) ?? event`
+            // — that would coalesce an intentional consume (nil) back into the event and beep.
+            guard let self else { return event }
+            return self.handleTypedKey(event)
         }
     }
     private func removeKeyMonitor() {
