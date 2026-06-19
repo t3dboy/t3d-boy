@@ -1477,6 +1477,9 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             if let vis = window.screen?.visibleFrame {
                 targetFrame.size.height = vis.height
                 targetFrame.origin.y = vis.minY
+                // Widen enough for the feature panels + the persistent scope side by side.
+                targetFrame.size.width = min(vis.width, max(targetFrame.size.width, 1020))
+                if targetFrame.maxX > vis.maxX { targetFrame.origin.x = max(vis.minX, vis.maxX - targetFrame.size.width) }
             }
             let contentH = window.contentRect(forFrameRect: targetFrame).height
             drawerTarget = max(barHeight + 120, contentH - tunesTopReveal)

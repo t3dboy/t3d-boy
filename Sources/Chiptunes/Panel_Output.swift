@@ -200,7 +200,6 @@ final class OutputPanel: NSView {
     private let engine: ChiptuneEngine
     private let onChange: () -> Void
 
-    private let scope: ScopeView
     private let editor: WavetableEditor
     private let exportButton = CapsuleButton(title: "Export WAV…", style: .neutral, fontSize: 13, height: 30)
 
@@ -212,7 +211,6 @@ final class OutputPanel: NSView {
     init(engine: ChiptuneEngine, onChange: @escaping () -> Void) {
         self.engine = engine
         self.onChange = onChange
-        self.scope = ScopeView(engine: engine)
         self.editor = WavetableEditor(engine: engine, onChange: onChange)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -222,13 +220,9 @@ final class OutputPanel: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func build() {
-        // --- Section captions ---
-        let scopeCap = panelCaption("Scope")
-        let waveCap = panelCaption("Wave (ch3)")
+        // --- Section captions --- (the live scope lives persistently to the right of the panels)
+        let waveCap = panelCaption("Wave (ch3) — drag to draw")
         let exportCap = panelCaption("Export")
-
-        // --- Oscilloscope ---
-        scope.setAccessibilityElement(false)
 
         // --- Wavetable editor + presets ---
         editor.setAccessibilityLabel("Wave channel wavetable. Drag to draw the waveform")
@@ -249,7 +243,7 @@ final class OutputPanel: NSView {
         // --- Export ---
         exportButton.onClick = { [weak self] in self?.beginExport() }
 
-        for v in [scopeCap, waveCap, exportCap, scope, editor, presets, exportButton] {
+        for v in [waveCap, exportCap, editor, presets, exportButton] {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
         }
@@ -257,20 +251,12 @@ final class OutputPanel: NSView {
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 210),
 
-            // Scope section (left). 16pt top/leading insets; caption above a 360×150 scope.
-            scopeCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            scopeCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            scope.topAnchor.constraint(equalTo: scopeCap.bottomAnchor, constant: 6),
-            scope.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            scope.widthAnchor.constraint(equalToConstant: 360),
-            scope.heightAnchor.constraint(equalToConstant: 150),
-
-            // Wavetable section (middle). ~30pt gap after the scope; 300×150 editor + presets.
+            // Wavetable section (left). 16pt insets; caption above a 340×150 editor + presets.
             waveCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            waveCap.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 30),
+            waveCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             editor.topAnchor.constraint(equalTo: waveCap.bottomAnchor, constant: 6),
-            editor.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 30),
-            editor.widthAnchor.constraint(equalToConstant: 300),
+            editor.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            editor.widthAnchor.constraint(equalToConstant: 340),
             editor.heightAnchor.constraint(equalToConstant: 150),
             presets.topAnchor.constraint(equalTo: editor.bottomAnchor, constant: 6),
             presets.leadingAnchor.constraint(equalTo: editor.leadingAnchor),

@@ -13,10 +13,9 @@ import Cocoa
 /// A top-down document view for the drawer's scroll view (NSView is bottom-up by default).
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
 
-/// A very faint live waveform drawn behind the step grid. Its amplitude tracks the actual
-/// output, so the sequencer feels alive — quiet is a near-flat line, and it swells as you
-/// layer more sounds in.
-final class ScopeBackdrop: NSView {
+/// A live oscilloscope panel — a framed screen showing the output waveform, refreshed ~30fps.
+/// Persistent on the right of the feature-panel area, so it's always visible.
+final class LiveScope: NSView {
     weak var engine: ChiptuneEngine?
     private var timer: Timer?
     override var isFlipped: Bool { true }
@@ -24,7 +23,7 @@ final class ScopeBackdrop: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.masksToBounds = true   // keep the big swings inside the grid, not bleeding out
+        layer?.masksToBounds = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -40,22 +39,30 @@ final class ScopeBackdrop: NSView {
     func stop() { timer?.invalidate(); timer = nil; needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let s = engine?.snapshotScope(), s.count > 1, bounds.width > 1 else { return }
-        let mid = bounds.midY, amp = bounds.height * 0.92  // swing nearly the full grid height
-        let gain: CGFloat = 3.2                            // exaggerate so it reaches the rails
-        let n = s.count
-        let path = NSBezierPath()
-        path.lineWidth = 2
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        for i in 0 ..< n {
-            let x = bounds.width * CGFloat(i) / CGFloat(n - 1)
-            let v = max(-1, min(1, CGFloat(s[i]) * gain))
-            let y = mid + v * amp
-            if i == 0 { path.move(to: NSPoint(x: x, y: y)) } else { path.line(to: NSPoint(x: x, y: y)) }
+        let frame = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                 xRadius: theme.radiusMedium, yRadius: theme.radiusMedium)
+        theme.surfaceScreen.setFill(); frame.fill()
+        // centre line
+        theme.lineHair.setStroke()
+        let mid = NSBezierPath()
+        mid.move(to: NSPoint(x: 6, y: bounds.midY)); mid.line(to: NSPoint(x: bounds.maxX - 6, y: bounds.midY))
+        mid.lineWidth = 1; mid.stroke()
+
+        if let s = engine?.snapshotScope(), s.count > 1, bounds.width > 1 {
+            NSGraphicsContext.current?.saveGraphicsState()
+            frame.addClip()
+            let cy = bounds.midY, amp = bounds.height * 0.42, gain: CGFloat = 2.4, n = s.count
+            let wave = NSBezierPath()
+            wave.lineWidth = 1.5; wave.lineCapStyle = .round; wave.lineJoinStyle = .round
+            for i in 0 ..< n {
+                let x = bounds.width * CGFloat(i) / CGFloat(n - 1)
+                let y = cy + max(-1, min(1, CGFloat(s[i]) * gain)) * amp
+                if i == 0 { wave.move(to: NSPoint(x: x, y: y)) } else { wave.line(to: NSPoint(x: x, y: y)) }
+            }
+            theme.accent.setStroke(); wave.stroke()
+            NSGraphicsContext.current?.restoreGraphicsState()
         }
-        theme.accent.withAlphaComponent(0.24).setStroke()
-        path.stroke()
+        theme.controlEdge.setStroke(); frame.lineWidth = 1; frame.stroke()
     }
 }
 
@@ -479,7 +486,7 @@ final class ChiptunesDrawer: NSView {
     private var featurePanels: [NSView] = []
     private var panelTabs: NSSegmentedControl?
     private weak var contentScroll: NSScrollView?
-    private let scopeBackdrop = ScopeBackdrop()   // faint live waveform behind the grid
+    private let liveScope = LiveScope()   // persistent oscilloscope, right of the feature panels
     private var recArmedLane: Int? = nil   // step-record: keyboard notes land on this lane
     private var recCursor = 0              // step-record write position
 
@@ -677,12 +684,18 @@ final class ChiptunesDrawer: NSView {
         status.textColor = theme.textFaint
         status.translatesAutoresizingMaskIntoConstraints = false
 
-        // Faint live waveform behind the grid (added first → sits at the back).
-        scopeBackdrop.engine = engine
-        scopeBackdrop.translatesAutoresizingMaskIntoConstraints = false
-        doc.addSubview(scopeBackdrop)
+        // Persistent oscilloscope on the right ~30% of the feature-panel row, with its caption
+        // sitting in the tab row.
+        liveScope.engine = engine
+        liveScope.translatesAutoresizingMaskIntoConstraints = false
+        let scopeCaption = NSTextField(labelWithString: theme.cased("Scope"))
+        scopeCaption.font = theme.fontMonoSmall
+        scopeCaption.textColor = theme.textSecondary
+        scopeCaption.alignment = .center
+        scopeCaption.setAccessibilityElement(false)
+        scopeCaption.translatesAutoresizingMaskIntoConstraints = false
 
-        for v in [transport, grid, kbControls, keyboard, tabs, host, status] { doc.addSubview(v) }
+        for v in [transport, grid, kbControls, keyboard, tabs, host, liveScope, scopeCaption, status] { doc.addSubview(v) }
         NSLayoutConstraint.activate([
             transport.topAnchor.constraint(equalTo: doc.topAnchor, constant: 14),
             transport.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -691,10 +704,15 @@ final class ChiptunesDrawer: NSView {
             grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
             grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
 
-            scopeBackdrop.leadingAnchor.constraint(equalTo: grid.leadingAnchor),
-            scopeBackdrop.trailingAnchor.constraint(equalTo: grid.trailingAnchor),
-            scopeBackdrop.topAnchor.constraint(equalTo: grid.topAnchor, constant: -4),
-            scopeBackdrop.bottomAnchor.constraint(equalTo: grid.bottomAnchor, constant: 4),
+            // Right column: scope spans the panel-host height; its caption sits over the tab row.
+            // Fixed width (not a proportion) so the panels' intrinsic size can't feed back and
+            // blow up the window.
+            liveScope.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
+            liveScope.widthAnchor.constraint(equalToConstant: 300),
+            liveScope.topAnchor.constraint(equalTo: host.topAnchor),
+            liveScope.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            scopeCaption.centerXAnchor.constraint(equalTo: liveScope.centerXAnchor),
+            scopeCaption.centerYAnchor.constraint(equalTo: tabs.centerYAnchor),
 
             kbControls.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 14),
             kbControls.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -709,7 +727,7 @@ final class ChiptunesDrawer: NSView {
 
             host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 10),
             host.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
-            host.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
+            host.trailingAnchor.constraint(equalTo: liveScope.leadingAnchor, constant: -14),
             host.heightAnchor.constraint(equalToConstant: 210),
 
             status.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 8),
@@ -1004,7 +1022,7 @@ final class ChiptunesDrawer: NSView {
         active = true
         engine.startAudioIfNeeded()
         installKeyMonitor()
-        scopeBackdrop.start()
+        liveScope.start()
         // Start the drawer scrolled at the top (transport row visible).
         DispatchQueue.main.async { [weak self] in self?.contentScroll?.contentView.scroll(to: .zero) }
         selectedROM = rom               // (active is true, so this kicks off a sample)
@@ -1014,7 +1032,7 @@ final class ChiptunesDrawer: NSView {
     /// Close the drawer: stop everything and cancel any pending sample.
     func suspend() {
         active = false
-        scopeBackdrop.stop()
+        liveScope.stop()
         removeKeyMonitor()
         pendingHarvest?.cancel(); pendingHarvest = nil
         harvestGen += 1 // invalidate any in-flight result
