@@ -21,6 +21,13 @@ final class ScopeBackdrop: NSView {
     private var timer: Timer?
     override var isFlipped: Bool { true }
 
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.masksToBounds = true   // keep the big swings inside the grid, not bleeding out
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
     func start() {
         guard timer == nil else { return }
         let t = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
@@ -34,17 +41,20 @@ final class ScopeBackdrop: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         guard let s = engine?.snapshotScope(), s.count > 1, bounds.width > 1 else { return }
-        let mid = bounds.midY, amp = bounds.height * 0.46
+        let mid = bounds.midY, amp = bounds.height * 0.92  // swing nearly the full grid height
+        let gain: CGFloat = 3.2                            // exaggerate so it reaches the rails
         let n = s.count
         let path = NSBezierPath()
-        path.lineWidth = 1.5
+        path.lineWidth = 2
         path.lineCapStyle = .round
+        path.lineJoinStyle = .round
         for i in 0 ..< n {
             let x = bounds.width * CGFloat(i) / CGFloat(n - 1)
-            let y = mid + CGFloat(max(-1, min(1, s[i]))) * amp
+            let v = max(-1, min(1, CGFloat(s[i]) * gain))
+            let y = mid + v * amp
             if i == 0 { path.move(to: NSPoint(x: x, y: y)) } else { path.line(to: NSPoint(x: x, y: y)) }
         }
-        theme.accent.withAlphaComponent(0.11).setStroke()
+        theme.accent.withAlphaComponent(0.24).setStroke()
         path.stroke()
     }
 }
