@@ -373,6 +373,34 @@ final class ChiptuneEngine {
         onPatternChanged?()
     }
 
+    // MARK: Live looping (loop-station style)
+
+    /// The lane currently armed for live recording (keyboard notes land on it), or nil.
+    var armedLane: Int?
+
+    /// Record a keyboard note into the armed lane, quantised onto the step the playhead is on
+    /// (so playing in time lands on the grid), and trigger it so you hear it immediately.
+    func liveRecord(_ note: Int) {
+        guard let lane = armedLane, lanes.indices.contains(lane) else { return }
+        let step = (isPlaying && currentStep >= 0) ? currentStep : max(0, lanePos[lane])
+        if lanes[lane].steps.indices.contains(step) {
+            lanes[lane].steps[step] = true
+            lanes[lane].pitches[step] = lanes[lane].patch.voice == .noise ? nil : note
+        }
+        trigger(lanes[lane].patch, note: note, volume: lanes[lane].volume, lane: lane)
+        onPatternChanged?()
+    }
+
+    /// Wipe a single lane (its steps + per-step pitches) — the loop-track "clear".
+    func clearLane(_ lane: Int) {
+        guard lanes.indices.contains(lane) else { return }
+        for s in lanes[lane].steps.indices { lanes[lane].steps[s] = false; lanes[lane].pitches[s] = nil }
+        onPatternChanged?()
+    }
+
+    /// Whether a lane has any active steps (a recorded loop).
+    func hasContent(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].steps.contains(true) }
+
     /// Fire every lane's content at one column (used by the beat-repeat / stutter pad).
     func triggerColumn(_ col: Int) {
         let anySolo = lanes.contains { $0.solo }

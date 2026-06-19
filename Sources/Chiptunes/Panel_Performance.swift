@@ -1,400 +1,293 @@
-// T3d Boy — T3d Tunes: the Performance panel.
+// T3d Boy — T3d Tunes "Perform" panel: a live loop station.
 //
-// A single horizontal band of live-performance controls grouped under tiny synth-style
-// captions: scene store/recall + a Morph knob, tap tempo, a momentary Stutter (beat-repeat)
-// pad, a Pump (fake sidechain) knob + division, and per-lane Solo toggles. Everything reads
-// the active theme tokens so it re-skins with the rest of the drawer.
+// Modelled on multi-channel loopers (à la Ed Sheeran's rig): the four Game Boy lanes are four
+// loop tracks sharing one clock (the sequencer). Arm a track (REC) and play the keyboard in
+// time — notes land on the grid quantised to the playhead — then bring tracks in and out with
+// MUTE and redo them with CLEAR. A master tap tempo, a stutter (beat-repeat) pad and the
+// sidechain pump round out the live-performance controls.
 
 import Cocoa
+
+// MARK: - Loop-station button (own-drawn so it can light up / pulse)
+
+private final class LoopButton: NSView {
+    var onClick: (() -> Void)?
+    var onPress: (() -> Void)?
+    var onRelease: (() -> Void)?
+    var title: String { didSet { needsDisplay = true } }
+    var tint: NSColor
+    var active = false { didSet { needsDisplay = true } }
+    var dimmed = false { didSet { needsDisplay = true } }
+    var glow: CGFloat = 0 { didSet { needsDisplay = true } }   // 0…1 pulse when armed
+    private static let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
+
+    init(title: String, tint: NSColor) {
+        self.title = title; self.tint = tint
+        super.init(frame: .zero)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func mouseDown(with event: NSEvent) {
+        if onRelease != nil { onPress?() } else { onClick?() }
+    }
+    override func mouseUp(with event: NSEvent) { onRelease?() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
+        let fill: NSColor = active ? (tint.blended(withFraction: glow * 0.45, of: .white) ?? tint)
+                                   : theme.surfaceInset
+        fill.setFill(); path.fill()
+        (active ? tint : theme.controlEdge).setStroke()
+        path.lineWidth = 1; path.stroke()
+        let fg = active ? theme.onAccent : (dimmed ? theme.textMuted : theme.textSecondary)
+        let s = NSAttributedString(string: title, attributes: [.font: Self.font, .foregroundColor: fg])
+        let sz = s.size()
+        s.draw(at: NSPoint(x: bounds.midX - sz.width / 2, y: bounds.midY - sz.height / 2))
+    }
+}
+
+// MARK: - Perform panel
 
 final class PerformancePanel: NSView {
     private let engine: ChiptuneEngine
     private let onChange: () -> Void
 
-    // Scenes
-    private let storeA = CapsuleButton(title: "Store A", style: .neutral, fontSize: 13, height: 30)
-    private let storeB = CapsuleButton(title: "Store B", style: .neutral, fontSize: 13, height: 30)
+    private var recButtons: [LoopButton] = []
+    private var muteButtons: [LoopButton] = []
+    private var soundLabels: [NSTextField] = []
+    private let bpmLabel = NSTextField(labelWithString: "120 BPM")
 
-    // Tap tempo
     private var tapTimes: [Double] = []
-    private let bpmReadout = NSTextField(labelWithString: "")
-
-    // Stutter (beat-repeat)
     private var stutterTimer: Timer?
-    private var stutterRate = 1   // 0 = 1/8, 1 = 1/16, 2 = 1/32 (index into stutterDivs)
-    private let stutterDivs = [8.0, 16.0, 32.0]
+    private var refreshTimer: Timer?
+    private var glowPhase: CGFloat = 0
+    private var stutterSubdiv = 4   // hits per beat: 2 = 1/8, 4 = 1/16, 8 = 1/32
+    private let stutterRateLabel = NSTextField(labelWithString: "1/16")
 
     init(engine: ChiptuneEngine, onChange: @escaping () -> Void) {
         self.engine = engine
         self.onChange = onChange
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
         build()
+        startRefresh()
     }
     required init?(coder: NSCoder) { fatalError() }
+    deinit { stutterTimer?.invalidate(); refreshTimer?.invalidate() }
 
-    deinit { stutterTimer?.invalidate() }
-
-    // MARK: - Build
+    private func caption(_ t: String, _ color: NSColor? = nil) -> NSTextField {
+        let l = NSTextField(labelWithString: theme.cased(t))
+        l.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        l.textColor = color ?? theme.textMuted
+        l.setAccessibilityElement(false)
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }
 
     private func build() {
-        // Top row: live scene/morph + tap-tempo controls.
-        let topRow = NSStackView(views: [
-            scenesGroup(),
-            divider(),
-            tempoGroup(),
-        ])
-        topRow.orientation = .horizontal
-        topRow.alignment = .top
-        topRow.spacing = 30
+        // --- Header: how-to hint + tap tempo ---
+        let hint = caption("Live loop — press Play, arm a track (REC), play it in, then layer up")
+        bpmLabel.font = theme.fontMonoSmall
+        bpmLabel.textColor = theme.textSecondary
+        bpmLabel.stringValue = "\(engine.bpm) BPM"
+        bpmLabel.translatesAutoresizingMaskIntoConstraints = false
+        let tap = LoopButton(title: "TAP", tint: theme.accent)
+        tap.onClick = { [weak self] in self?.tapTempo() }
+        size(tap, 60, 24)
+        let header = row([hint, flexSpacer(), tap, bpmLabel], spacing: 8)
 
-        // Bottom row: a relaxed grid of stutter, pump and per-lane solo controls.
-        let bottomRow = NSStackView(views: [
-            stutterGroup(),
-            divider(),
-            pumpGroup(),
-            divider(),
-            soloGroup(),
-        ])
-        bottomRow.orientation = .horizontal
-        bottomRow.alignment = .top
-        bottomRow.spacing = 30
+        // --- Four loop tracks ---
+        var trackRows: [NSView] = []
+        for lane in 0 ..< 4 {
+            let voice = ChipVoice(rawValue: lane)!
+            let dot = NSView(); dot.wantsLayer = true; dot.layer?.cornerRadius = 5
+            dot.layer?.backgroundColor = voiceColor(voice).cgColor
+            dot.translatesAutoresizingMaskIntoConstraints = false
+            size(dot, 10, 10)
 
-        let rows = NSStackView(views: [topRow, bottomRow])
-        rows.orientation = .vertical
-        rows.alignment = .leading
-        rows.spacing = 20
-        rows.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(rows)
+            let name = NSTextField(labelWithString: voice.short)
+            name.font = theme.fontMonoSmall; name.textColor = voiceColor(voice)
+            name.translatesAutoresizingMaskIntoConstraints = false
+
+            let sound = NSTextField(labelWithString: engine.patch(lane: lane).name)
+            sound.font = theme.fontCaption; sound.textColor = theme.textMuted
+            sound.lineBreakMode = .byTruncatingTail
+            sound.translatesAutoresizingMaskIntoConstraints = false
+            sound.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            soundLabels.append(sound)
+
+            let rec = LoopButton(title: "REC", tint: .systemRed)
+            rec.onClick = { [weak self] in self?.toggleArm(lane) }
+            size(rec, 62, 26)
+            rec.setAccessibilityLabel("\(voice.short) record arm")
+            recButtons.append(rec)
+
+            let mute = LoopButton(title: "MUTE", tint: theme.warm)
+            mute.onClick = { [weak self] in self?.toggleMute(lane) }
+            size(mute, 62, 26)
+            mute.setAccessibilityLabel("\(voice.short) mute")
+            muteButtons.append(mute)
+
+            let clear = LoopButton(title: "CLEAR", tint: theme.textPrimary)
+            clear.onClick = { [weak self] in self?.clear(lane) }
+            size(clear, 58, 26)
+
+            let head = row([dot, name], spacing: 6)
+            size(head, 58, 26)
+            let r = row([head, sound, flexSpacer(), rec, mute, clear], spacing: 8)
+            size(r, nil, 28)
+            trackRows.append(r)
+        }
+
+        // --- Performance FX: stutter pad + pump ---
+        let stutter = LoopButton(title: "STUTTER", tint: theme.accent)
+        stutter.onPress = { [weak self] in self?.startStutter() }
+        stutter.onRelease = { [weak self] in self?.stopStutter() }
+        size(stutter, 96, 28)
+        let rateStepper = NSStepper()
+        rateStepper.minValue = 0; rateStepper.maxValue = 2; rateStepper.increment = 1; rateStepper.integerValue = 1
+        rateStepper.valueWraps = false; rateStepper.target = self; rateStepper.action = #selector(stutterRateChanged(_:))
+        rateStepper.translatesAutoresizingMaskIntoConstraints = false
+        stutterRateLabel.font = theme.fontMonoSmall; stutterRateLabel.textColor = theme.textSecondary
+        stutterRateLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        let pumpSlider = NSSlider(value: engine.pumpDepth, minValue: 0, maxValue: 1,
+                                  target: self, action: #selector(pumpChanged(_:)))
+        pumpSlider.controlSize = .small
+        pumpSlider.translatesAutoresizingMaskIntoConstraints = false
+        size(pumpSlider, 130, 18)
+        let pumpStepper = NSStepper()
+        pumpStepper.minValue = 0; pumpStepper.maxValue = 3; pumpStepper.increment = 1; pumpStepper.integerValue = 1
+        pumpStepper.target = self; pumpStepper.action = #selector(pumpDivChanged(_:))
+        pumpStepper.translatesAutoresizingMaskIntoConstraints = false
+
+        let fx = row([stutter, caption("Rate"), stutterRateLabel, rateStepper, flexSpacer(),
+                      caption("Pump"), pumpSlider, pumpStepper], spacing: 8)
+        size(fx, nil, 30)
+
+        let rows = [header] + trackRows + [fx]
+        let stack = NSStackView(views: rows)
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 5
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
         NSLayoutConstraint.activate([
-            rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            rows.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
-            rows.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            rows.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
         ])
-        refreshSceneTints()
-        updateBpmReadout()
-    }
-
-    // MARK: Groups
-
-    private func scenesGroup() -> NSView {
-        storeA.onClick = { [weak self] in
-            guard let self else { return }
-            self.engine.storeScene(false); self.refreshSceneTints(); self.onChange()
+        for v in rows {   // stretch each row to the full width
+            v.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
+            v.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
         }
-        storeB.onClick = { [weak self] in
-            guard let self else { return }
-            self.engine.storeScene(true); self.refreshSceneTints(); self.onChange()
+        updateStates()
+    }
+
+    // MARK: Layout helpers
+
+    private func row(_ views: [NSView], spacing: CGFloat) -> NSStackView {
+        let s = NSStackView(views: views)
+        s.orientation = .horizontal; s.alignment = .centerY; s.spacing = spacing
+        s.translatesAutoresizingMaskIntoConstraints = false
+        return s
+    }
+    private func flexSpacer() -> NSView {
+        let v = NSView(); v.translatesAutoresizingMaskIntoConstraints = false
+        v.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        return v
+    }
+    private func size(_ v: NSView, _ w: CGFloat?, _ h: CGFloat?) {
+        if let w { v.widthAnchor.constraint(equalToConstant: w).isActive = true }
+        if let h { v.heightAnchor.constraint(equalToConstant: h).isActive = true }
+    }
+
+    // MARK: Track actions
+
+    private func toggleArm(_ lane: Int) {
+        engine.armedLane = (engine.armedLane == lane) ? nil : lane
+        updateStates()
+    }
+    private func toggleMute(_ lane: Int) {
+        engine.setMuted(!engine.isMuted(lane: lane), lane: lane)
+        updateStates()
+    }
+    private func clear(_ lane: Int) {
+        engine.clearLane(lane)
+        onChange()
+        updateStates()
+    }
+
+    private func updateStates() {
+        for lane in 0 ..< recButtons.count {
+            recButtons[lane].active = (engine.armedLane == lane)
+            let muted = engine.isMuted(lane: lane)
+            muteButtons[lane].active = muted
+            muteButtons[lane].title = muted ? "MUTED" : "MUTE"
+            muteButtons[lane].dimmed = !engine.hasContent(lane: lane)
+            soundLabels[lane].stringValue = engine.patch(lane: lane).name
         }
-        let recallA = ChipIconButton(symbols: ["a.square", "a.circle"], label: "Recall Scene A")
-        recallA.onClick = { [weak self] in self?.engine.recallScene(false); self?.onChange() }
-        let recallB = ChipIconButton(symbols: ["b.square", "b.circle"], label: "Recall Scene B")
-        recallB.onClick = { [weak self] in self?.engine.recallScene(true); self?.onChange() }
-
-        let morph = ChipKnob(value: 0, in: 0 ... 1)
-        morph.setAccessibilityLabel("Morph")
-        morph.onChange = { [weak self] v in self?.engine.morph(v); self?.onChange() }
-
-        // Stacked store/recall buttons at a comfortable size.
-        storeA.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
-        storeB.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
-
-        let stores = NSStackView(views: [storeA, storeB])
-        stores.orientation = .vertical; stores.alignment = .leading; stores.spacing = 8
-        let recalls = NSStackView(views: [recallA, recallB])
-        recalls.orientation = .vertical; recalls.spacing = 8
-
-        let row = NSStackView(views: [stores, recalls, labeled(morph, "Morph")])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
-        return captioned(row, "Scenes")
     }
 
-    private func tempoGroup() -> NSView {
-        let tap = CapsuleButton(title: "Tap", style: .neutral, fontSize: 13, height: 30)
-        tap.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
-        tap.onClick = { [weak self] in self?.registerTap() }
+    // MARK: Tap tempo
 
-        bpmReadout.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
-        bpmReadout.textColor = theme.textSecondary
-        bpmReadout.alignment = .center
-        bpmReadout.setAccessibilityElement(false)
-
-        let col = NSStackView(views: [tap, bpmReadout])
-        col.orientation = .vertical; col.alignment = .centerX; col.spacing = 6
-        return captioned(col, "Tempo")
-    }
-
-    private func stutterGroup() -> NSView {
-        let pad = HoldPad(title: "Stutter")
-        pad.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
-        pad.onStart = { [weak self] in self?.startStutter() }
-        pad.onStop = { [weak self] in self?.stopStutter() }
-
-        let stepper = NSStepper()
-        stepper.minValue = 0
-        stepper.maxValue = Double(stutterDivs.count - 1)
-        stepper.increment = 1
-        stepper.integerValue = stutterRate
-        stepper.valueWraps = false
-        stepper.controlSize = .small
-        stepper.target = self
-        stepper.action = #selector(stutterRateChanged(_:))
-        stepper.setAccessibilityLabel("Stutter rate")
-
-        let rateCap = NSTextField(labelWithString: rateLabel())
-        rateCap.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
-        rateCap.textColor = theme.textMuted
-        rateCap.alignment = .center
-        rateCap.setAccessibilityElement(false)
-        stutterRateLabel = rateCap
-
-        let rate = NSStackView(views: [stepper, rateCap])
-        rate.orientation = .vertical; rate.alignment = .centerX; rate.spacing = 1
-
-        let row = NSStackView(views: [pad, rate])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 12
-        return captioned(row, "Stutter")
-    }
-    private weak var stutterRateLabel: NSTextField?
-
-    private func pumpGroup() -> NSView {
-        let depth = ChipKnob(value: engine.pumpDepth, in: 0 ... 1)
-        depth.setAccessibilityLabel("Pump depth")
-        depth.onChange = { [weak self] v in self?.engine.pumpDepth = v }
-
-        let divs = [1, 2, 4, 8]
-        let stepper = NSStepper()
-        stepper.minValue = 0
-        stepper.maxValue = Double(divs.count - 1)
-        stepper.increment = 1
-        stepper.integerValue = divs.firstIndex(of: engine.pumpDivision) ?? 2
-        stepper.valueWraps = false
-        stepper.controlSize = .small
-        stepper.setAccessibilityLabel("Pump division")
-        let divLabel = NSTextField(labelWithString: "1/\(engine.pumpDivision)")
-        divLabel.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
-        divLabel.textColor = theme.textMuted
-        divLabel.alignment = .center
-        divLabel.setAccessibilityElement(false)
-        let onStep: () -> Void = { [weak self, weak stepper, weak divLabel] in
-            guard let self, let stepper else { return }
-            let d = divs[max(0, min(divs.count - 1, stepper.integerValue))]
-            self.engine.pumpDivision = d
-            divLabel?.stringValue = "1/\(d)"
-        }
-        stepperBridge = StepperBridge(action: onStep)
-        stepper.target = stepperBridge
-        stepper.action = #selector(StepperBridge.fire)
-
-        let div = NSStackView(views: [stepper, divLabel])
-        div.orientation = .vertical; div.alignment = .centerX; div.spacing = 1
-
-        let row = NSStackView(views: [labeled(depth, "Depth"), div])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
-        return captioned(row, "Pump")
-    }
-    private var stepperBridge: StepperBridge?
-
-    private func soloGroup() -> NSView {
-        var cells: [NSView] = []
-        for i in 0 ..< 4 {
-            let voice = ChipVoice(rawValue: i)!
-            let toggle = SettingToggle()
-            toggle.isOn = engine.isSolo(lane: i)
-            toggle.setAccessibilityName("Solo \(voice.short)")
-            toggle.onToggle = { [weak self] on in self?.engine.setSolo(on, lane: i); self?.onChange() }
-            cells.append(labeled(toggle, voice.short, tint: voiceColor(voice)))
-        }
-        let row = NSStackView(views: cells)
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
-        return captioned(row, "Solo")
-    }
-
-    // MARK: - Tap tempo
-
-    private func registerTap() {
+    private func tapTempo() {
         let now = ProcessInfo.processInfo.systemUptime
-        // Reset the average if it's been too long since the last tap (new tempo intent).
-        if let last = tapTimes.last, now - last > 2.0 { tapTimes.removeAll() }
+        if let last = tapTimes.last, now - last > 2.0 { tapTimes.removeAll() } // start a new count
         tapTimes.append(now)
         if tapTimes.count > 5 { tapTimes.removeFirst(tapTimes.count - 5) }
-        guard tapTimes.count >= 2 else { updateBpmReadout(); return }
-        var intervals: [Double] = []
-        for i in 1 ..< tapTimes.count { intervals.append(tapTimes[i] - tapTimes[i - 1]) }
+        guard tapTimes.count >= 2 else { return }
+        let intervals = zip(tapTimes.dropFirst(), tapTimes).map { $0 - $1 }
         let avg = intervals.reduce(0, +) / Double(intervals.count)
-        guard avg > 0 else { return }
+        guard avg > 0.2, avg < 2.0 else { return }
         engine.bpm = max(40, min(240, Int((60.0 / avg).rounded())))
-        updateBpmReadout()
-        onChange()
+        bpmLabel.stringValue = "\(engine.bpm) BPM"
     }
 
-    private func updateBpmReadout() {
-        bpmReadout.stringValue = theme.cased("\(engine.bpm) BPM")
-    }
-
-    // MARK: - Stutter
-
-    @objc private func stutterRateChanged(_ sender: NSStepper) {
-        stutterRate = max(0, min(stutterDivs.count - 1, sender.integerValue))
-        stutterRateLabel?.stringValue = rateLabel()
-        // Retune a running stutter to the new rate.
-        if stutterTimer != nil { startStutter() }
-    }
-
-    private func rateLabel() -> String { "1/\(Int(stutterDivs[stutterRate]))" }
-
-    private func stutterInterval() -> TimeInterval {
-        // A 1/N note = (4/N) quarter-notes; one quarter = 60/bpm seconds.
-        let bpm = Double(max(40, engine.bpm))
-        return (60.0 / bpm) * (4.0 / stutterDivs[stutterRate])
-    }
+    // MARK: Stutter (beat-repeat)
 
     private func startStutter() {
         stutterTimer?.invalidate()
-        let fire: () -> Void = { [weak self] in
+        let interval = 60.0 / Double(max(40, engine.bpm)) / Double(stutterSubdiv)
+        engine.triggerColumn(max(0, engine.currentStep))   // fire immediately
+        let t = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.engine.triggerColumn(max(0, self.engine.currentStep))
         }
-        fire() // immediate first hit
-        let t = Timer(timeInterval: stutterInterval(), repeats: true) { _ in fire() }
         RunLoop.main.add(t, forMode: .common)
         stutterTimer = t
     }
+    private func stopStutter() { stutterTimer?.invalidate(); stutterTimer = nil }
 
-    private func stopStutter() {
-        stutterTimer?.invalidate()
-        stutterTimer = nil
+    @objc private func stutterRateChanged(_ s: NSStepper) {
+        let map = [2, 4, 8], names = ["1/8", "1/16", "1/32"]
+        let i = max(0, min(2, s.integerValue))
+        stutterSubdiv = map[i]; stutterRateLabel.stringValue = names[i]
     }
 
-    // MARK: - Scenes
+    // MARK: Pump
 
-    private func refreshSceneTints() {
-        styleStore(storeA, on: engine.hasScene(false))
-        styleStore(storeB, on: engine.hasScene(true))
+    @objc private func pumpChanged(_ s: NSSlider) { engine.pumpDepth = s.doubleValue }
+    @objc private func pumpDivChanged(_ s: NSStepper) {
+        engine.pumpDivision = [1, 2, 4, 8][max(0, min(3, s.integerValue))]
     }
 
-    private func styleStore(_ button: CapsuleButton, on: Bool) {
-        button.wantsLayer = true
-        button.layer?.borderWidth = on ? 1.5 : 0
-        button.layer?.borderColor = on ? theme.keyGreen.cgColor : NSColor.clear.cgColor
-        button.layer?.cornerRadius = theme.skinned ? theme.radiusMedium : 12
-    }
+    // MARK: Live refresh (armed-track pulse + state sync)
 
-    // MARK: - Layout helpers
-
-    /// A control with a tiny synth-style caption beneath it.
-    private func labeled(_ control: NSView, _ title: String, tint: NSColor? = nil) -> NSView {
-        let cap = NSTextField(labelWithString: theme.cased(title))
-        cap.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
-        cap.textColor = tint ?? theme.textMuted
-        cap.alignment = .center
-        cap.setAccessibilityElement(false)
-        let v = NSStackView(views: [control, cap])
-        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 4
-        return v
-    }
-
-    /// A group of controls beneath a small section caption (caption heads the group).
-    private func captioned(_ body: NSView, _ title: String) -> NSView {
-        let cap = NSTextField(labelWithString: theme.cased(title))
-        cap.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
-        cap.textColor = theme.textMuted
-        cap.setAccessibilityElement(false)
-        let v = NSStackView(views: [cap, body])
-        v.orientation = .vertical; v.alignment = .leading; v.spacing = 4
-        return v
-    }
-
-    private func divider() -> NSView {
-        let v = NSView()
-        v.wantsLayer = true
-        v.layer?.backgroundColor = theme.lineHair.cgColor
-        v.translatesAutoresizingMaskIntoConstraints = false
-        v.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        v.heightAnchor.constraint(equalToConstant: 52).isActive = true
-        v.setAccessibilityElement(false)
-        return v
-    }
-}
-
-// MARK: - Hold pad (momentary beat-repeat)
-//
-// A capsule that fires `onStart` on mouse-down and `onStop` on mouse-up — for the Stutter
-// beat-repeat, which must run only while held (CapsuleButton uses click semantics, so we
-// roll a minimal hold control matching its neutral look).
-private final class HoldPad: NSView {
-    var onStart: (() -> Void)?
-    var onStop: (() -> Void)?
-    private let label = NSTextField(labelWithString: "")
-    private var held = false { didSet { needsDisplay = true } }
-
-    init(title: String) {
-        super.init(frame: .zero)
-        wantsLayer = true
-        translatesAutoresizingMaskIntoConstraints = false
-        label.stringValue = theme.cased(title)
-        label.font = theme.skinned ? .rounded(12, .medium) : .systemFont(ofSize: 12, weight: .semibold)
-        label.alignment = .center
-        label.textColor = theme.textSecondary
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.setAccessibilityElement(false)
-        addSubview(label)
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 30),
-            widthAnchor.constraint(greaterThanOrEqualToConstant: 64),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-        ])
-        setAccessibilityElement(true)
-        setAccessibilityRole(.button)
-        setAccessibilityLabel(title)
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { frame.contains(point) ? self : nil }
-
-    override func mouseDown(with event: NSEvent) {
-        held = true
-        onStart?()
-    }
-    override func mouseUp(with event: NSEvent) {
-        guard held else { return }
-        held = false
-        onStop?()
-    }
-
-    // VoiceOver: a press is a single momentary burst.
-    override func accessibilityPerformPress() -> Bool {
-        onStart?(); onStop?(); return true
-    }
-
-    override func layout() {
-        super.layout()
-        layer?.cornerRadius = theme.skinned ? theme.radiusMedium : bounds.height / 2
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: layer?.cornerRadius ?? 8, yRadius: layer?.cornerRadius ?? 8)
-        if theme.skinned {
-            theme.textPrimary.withAlphaComponent(held ? 0.16 : 0).setFill(); path.fill()
-            (held ? theme.keyGreen : theme.controlEdge).setStroke()
-        } else {
-            NSColor.labelColor.withAlphaComponent(held ? 0.2 : 0.08).setFill(); path.fill()
-            NSColor.clear.setStroke()
+    private func startRefresh() {
+        let t = Timer(timeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
+            guard let self, self.window != nil, !self.isHidden else { return }
+            self.glowPhase += 0.5
+            let g = (sin(self.glowPhase) + 1) / 2
+            for (lane, rec) in self.recButtons.enumerated() where self.engine.armedLane == lane {
+                rec.glow = g
+            }
+            self.bpmLabel.stringValue = "\(self.engine.bpm) BPM"
         }
-        path.lineWidth = 1; path.stroke()
-        label.textColor = held ? theme.textPrimary : theme.textSecondary
+        RunLoop.main.add(t, forMode: .common)
+        refreshTimer = t
     }
-}
-
-// MARK: - Stepper bridge
-//
-// Routes a target/action NSStepper to a Swift closure (NSStepper needs an @objc target).
-private final class StepperBridge: NSObject {
-    private let action: () -> Void
-    init(action: @escaping () -> Void) { self.action = action; super.init() }
-    @objc func fire() { action() }
 }

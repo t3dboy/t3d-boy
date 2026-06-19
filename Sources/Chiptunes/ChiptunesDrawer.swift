@@ -487,8 +487,6 @@ final class ChiptunesDrawer: NSView {
     private var panelTabs: NSSegmentedControl?
     private weak var contentScroll: NSScrollView?
     private let liveScope = LiveScope()   // persistent oscilloscope, right of the feature panels
-    private var recArmedLane: Int? = nil   // step-record: keyboard notes land on this lane
-    private var recCursor = 0              // step-record write position
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -626,26 +624,18 @@ final class ChiptunesDrawer: NSView {
 
         keyboard.translatesAutoresizingMaskIntoConstraints = false
         keyboard.onNote = { [weak self] note in
-            guard let self, let patch = self.kbPatch else { return }
-            self.engine.playKey(patch, note: note, throughFX: self.kbUseFX)
-            // Step-record: lay the played note onto the armed lane and advance the cursor.
-            if let lane = self.recArmedLane {
-                let step = self.recCursor % self.engine.stepCount
-                if !self.engine.isStepOn(lane: lane, step: step) { self.engine.toggleStep(lane: lane, step: step) }
-                self.engine.setStepPitch(note, lane: lane, step: step)
-                self.recCursor += 1
-                self.refreshSteps()
+            guard let self else { return }
+            // If a loop track is armed (Perform tab), the keyboard records into it, quantised
+            // to the playhead; otherwise it plays the selected keyboard sound.
+            if self.engine.armedLane != nil {
+                self.engine.liveRecord(note)
+            } else if let patch = self.kbPatch {
+                self.engine.playKey(patch, note: note, throughFX: self.kbUseFX)
             }
         }
 
-        // Step-record arm: when a lane is armed, keyboard notes write into its steps.
-        let recToggle = SettingToggle()
-        recToggle.setAccessibilityName("Step record. Arm the keyboard to write notes into the selected lane")
-        recToggle.onToggle = { [weak self] on in self?.recArmedLane = on ? 0 : nil }
-
         let kbControls = NSStackView(views: [kbCaption, kbMenu, spacer(20),
-                                             labeledControl(kbFXToggle, "Use FX"),
-                                             spacer(10), labeledControl(recToggle, "Rec→PUL1")])
+                                             labeledControl(kbFXToggle, "Use FX")])
         kbControls.orientation = .horizontal
         kbControls.alignment = .centerY
         kbControls.spacing = 8
