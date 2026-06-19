@@ -543,15 +543,18 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let chiptunesDrawer = ChiptunesDrawer()
     private var chiptunesOpen = false
     private var chiptunesHeightConstraint: NSLayoutConstraint!
-    private let chiptunesBaseHeight: CGFloat = 470
-    private let chiptunesBonusHeight: CGFloat = 60 // extra room when the achievements drawer is open
     private var barHeight: CGFloat { ChiptunesDrawer.barHeight } // the always-visible launcher bar
-    /// Drawer height when closed (just the bar) and open (bar + instrument).
+    /// Drawer height when closed (just the bar).
     private var chiptunesClosedHeight: CGFloat { barHeight }
-    private var chiptunesOpenHeight: CGFloat { barHeight + chiptunesBaseHeight + (drawerOpen ? chiptunesBonusHeight : 0) }
-    /// The library body sits above the chiptunes drawer; bottom-anchored chrome hangs off
-    /// the drawer's top edge (0-height when closed, so the layout is unchanged).
-    private var bodyBottom: NSLayoutYAxisAnchor { chiptunesDrawer.topAnchor }
+    /// When open, the drawer overlays the library and the window fills the screen, leaving this
+    /// much of the library showing at the top (tabs + sort + the ROM list) so you can still
+    /// browse and switch games while the sequencer fills the rest.
+    private let tunesTopReveal: CGFloat = 196
+    private var preTunesFrame: NSRect?   // window frame to restore when the drawer closes
+    /// Fixed bottom edge for the library body: just above the always-visible bar. Decoupled
+    /// from the drawer's height so the body never squishes when the drawer overlays it.
+    private let bodyGuide = NSLayoutGuide()
+    private var bodyBottom: NSLayoutYAxisAnchor { bodyGuide.bottomAnchor }
     private var previewTimer: Timer?
     private var previewedURL: URL?
     private var raIdleTimer: Timer?
@@ -642,6 +645,17 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             chiptunesDrawer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             chiptunesDrawer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
             chiptunesHeightConstraint,
+        ])
+
+        // Fixed body region: the whole content minus the always-visible bar. The body
+        // bottom-anchors to this (not the drawer), so it keeps its size when the open
+        // drawer overlays it.
+        content.addLayoutGuide(bodyGuide)
+        NSLayoutConstraint.activate([
+            bodyGuide.topAnchor.constraint(equalTo: content.topAnchor),
+            bodyGuide.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            bodyGuide.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            bodyGuide.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -barHeight),
         ])
 
         // Warm list-pane background sits behind everything (skinned themes only).
@@ -1447,26 +1461,35 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         guard open != chiptunesOpen, let window else { return }
         chiptunesOpen = open
         chiptunesDrawer.setExpanded(open)
-        let target: CGFloat = open ? chiptunesOpenHeight : chiptunesClosedHeight
 
-        var f = window.frame
-        let delta = target - chiptunesHeightConstraint.constant
-        f.size.height += delta
-        f.origin.y -= delta // keep the top edge fixed; the window grows downward
-        if open, let vis = window.screen?.visibleFrame, f.origin.y < vis.minY {
-            f.origin.y = vis.minY // stay on-screen if it would run off the bottom
+        // Opening: fill the screen height and let the drawer overlay the library, leaving the
+        // top (tabs + sort + ROM list) showing so you can still switch games. Closing: restore
+        // the previous window frame and collapse the drawer back to its bar.
+        var targetFrame = window.frame
+        let drawerTarget: CGFloat
+        if open {
+            preTunesFrame = window.frame
+            if let vis = window.screen?.visibleFrame {
+                targetFrame.size.height = vis.height
+                targetFrame.origin.y = vis.minY
+            }
+            let contentH = window.contentRect(forFrameRect: targetFrame).height
+            drawerTarget = max(barHeight + 120, contentH - tunesTopReveal)
+        } else {
+            targetFrame = preTunesFrame ?? window.frame
+            drawerTarget = chiptunesClosedHeight
         }
 
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.22
+                ctx.duration = 0.24
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                chiptunesHeightConstraint.animator().constant = target
-                window.animator().setFrame(f, display: true)
+                chiptunesHeightConstraint.animator().constant = drawerTarget
+                window.animator().setFrame(targetFrame, display: true)
             }
         } else {
-            chiptunesHeightConstraint.constant = target
-            window.setFrame(f, display: true)
+            chiptunesHeightConstraint.constant = drawerTarget
+            window.setFrame(targetFrame, display: true)
         }
 
         if open {
@@ -1493,27 +1516,16 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         if open, let vis = window.screen?.visibleFrame, f.maxX > vis.maxX {
             f.origin.x = max(vis.minX, vis.maxX - f.size.width) // slide left to stay on-screen
         }
-        // If the chiptunes drawer is open, it grows taller when the achievements drawer is —
-        // adjust its height and the window together for the "even larger" feel.
-        var chipTarget = chiptunesHeightConstraint.constant
-        if chiptunesOpen {
-            chipTarget = barHeight + chiptunesBaseHeight + (open ? chiptunesBonusHeight : 0)
-            let hDelta = chipTarget - chiptunesHeightConstraint.constant
-            f.size.height += hDelta
-            f.origin.y -= hDelta
-        }
 
         if animated {
             NSAnimationContext.runAnimationGroup { ctx in
                 ctx.duration = 0.2
                 ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
                 drawerWidthConstraint.animator().constant = open ? drawerWidth : 0
-                if chiptunesOpen { chiptunesHeightConstraint.animator().constant = chipTarget }
                 window.animator().setFrame(f, display: true)
             }
         } else {
             drawerWidthConstraint.constant = open ? drawerWidth : 0
-            if chiptunesOpen { chiptunesHeightConstraint.constant = chipTarget }
             window.setFrame(f, display: true)
         }
 
