@@ -85,6 +85,27 @@ enum ChipNote {
 
 // MARK: - Engine
 
+/// Per-lane step playback order.
+enum StepDirection: Int, CaseIterable { case forward, reverse, pingpong, random
+    var label: String { ["→", "←", "↔", "✕"][rawValue] }
+}
+
+/// Arpeggio shape — semitone offsets cycled across the note's sub-steps.
+enum ArpShape: Int, CaseIterable {
+    case octave, majTriad, minTriad, fifth, octaveDown, majSeventh
+    var label: String { ["Oct", "Maj", "Min", "5th", "Oct↓", "Maj7"][rawValue] }
+    var offsets: [Int] {
+        switch self {
+        case .octave:     return [0, 12]
+        case .majTriad:   return [0, 4, 7]
+        case .minTriad:   return [0, 3, 7]
+        case .fifth:      return [0, 7]
+        case .octaveDown: return [0, -12]
+        case .majSeventh: return [0, 4, 7, 11]
+        }
+    }
+}
+
 final class ChiptuneEngine {
     /// One lane = one Game Boy channel in the loop.
     struct Lane {
@@ -93,6 +114,24 @@ final class ChiptuneEngine {
         var rootNote: Int   // MIDI note the lane plays
         var volume: Double  // 0…1 (scales the patch envelope)
         var muted: Bool = false
+        var solo: Bool = false
+
+        // --- Sequencing (per-step arrays are all `stepCount` long) ---
+        var length: Int = 16                                   // polymeter: loop length 1…16
+        var direction: StepDirection = .forward
+        var probability: [Int] = Array(repeating: 100, count: 16) // per-step % chance to fire
+        var ratchets: [Int]    = Array(repeating: 1, count: 16)   // per-step retrigger count 1…8
+        var pitches: [Int?]    = Array(repeating: nil, count: 16) // per-step note override (nil = root)
+        var soundLock: [Int?]  = Array(repeating: nil, count: 16) // per-step palette-index override
+
+        // --- Synth (GB-authentic) ---
+        var arpOn = false
+        var arpShape: ArpShape = .octave
+        var arpRate = 3                 // notes per step when arp is on
+        var pwm: Double = 0             // 0 = off; sweeps the pulse duty over the note
+        var vibratoDepth: Double = 0    // 0…1 pitch wobble
+        var vibratoRate: Double = 6     // Hz
+        var soundShuffle = false        // each hit grabs a random palette patch of this voice
     }
 
     private let apu = APU()
@@ -121,9 +160,45 @@ final class ChiptuneEngine {
     private(set) var isPlaying = false
     /// Fired (on the main thread) when the playhead advances, with the new step index.
     var onStep: ((Int) -> Void)?
+    /// Fired (main thread) when the pattern data itself changes (mutate, euclidean, auto-compose,
+    /// shuffle, scene recall) so the grid UI can redraw.
+    var onPatternChanged: (() -> Void)?
 
     private var stepAccum = 0.0
-    private var laneFreed = [Bool](repeating: true, count: 4) // for retrigger spacing (unused v1)
+    private var lanePos = [Int](repeating: -1, count: 4) // independent step index per lane (polymeter)
+    private var laneDirSign = [Int](repeating: 1, count: 4) // ping-pong direction per lane
+
+    // Scheduled sub-hits (ratchets + arp): fired when `clockTime` passes `due`.
+    private struct PendingHit { var due: Double; var lane: Int; var note: Int; var volume: Double; var patch: ChiptunePatch }
+    private var pending: [PendingHit] = []
+    private var clockTime: Double = 0
+
+    // Per-lane note modulation (vibrato + PWM) active for the gated note's lifetime.
+    private struct Mod { var note: Int; var voice: ChipVoice; var t: Double; var vibDepth: Double; var vibRate: Double; var pwm: Double; var duty: Int }
+    private var mods: [Int: Mod] = [:]
+
+    // The sound palette the lanes/keyboard draw from (set by the drawer when a ROM is sampled),
+    // used by per-step sound locks, sound-shuffle, and auto-compose.
+    var palette: [ChiptunePatch] = ChiptunePatch.builtIns
+
+    // --- Scenes (pattern snapshots) + morph ---
+    struct Scene { var lanes: [Lane] }
+    private(set) var sceneA: Scene?
+    private(set) var sceneB: Scene?
+
+    // --- Master output hooks ---
+    /// Sidechain "pump": >0 ducks the master on a tempo-synced envelope (set by the Pump knob).
+    var pumpDepth: Double = 0
+    var pumpDivision = 4   // duck every Nth 16th-note (4 = every quarter)
+    private var masterMixer: AVAudioMixerNode?
+    /// Most-recent output samples for an oscilloscope view. The audio thread writes round-robin
+    /// into this raw buffer (single writer); `snapshotScope()` copies it out for drawing.
+    static let scopeCount = 512
+    private let scopeBuf: UnsafeMutablePointer<Float> = {
+        let p = UnsafeMutablePointer<Float>.allocate(capacity: ChiptuneEngine.scopeCount)
+        p.initialize(repeating: 0, count: ChiptuneEngine.scopeCount); return p
+    }()
+    func snapshotScope() -> [Float] { Array(UnsafeBufferPointer(start: scopeBuf, count: Self.scopeCount)) }
 
     init() {
         lanes = ChipVoice.allCases.map { voice in
@@ -201,6 +276,121 @@ final class ChiptuneEngine {
     func isMuted(lane: Int) -> Bool { lanes[lane].muted }
     func clear() { for i in lanes.indices { for s in lanes[i].steps.indices { lanes[i].steps[s] = false } } }
 
+    // MARK: - Extended sequencer / synth API (driven by the feature panels)
+
+    /// Fired (main thread) when the sound palette changes (e.g. ROM mashup) so menus refresh.
+    var onPaletteChanged: (() -> Void)?
+    func setPalette(_ p: [ChiptunePatch]) { palette = p.isEmpty ? ChiptunePatch.builtIns : p; onPaletteChanged?() }
+
+    // Per-lane sequencing
+    func setLength(_ n: Int, lane: Int)   { if lanes.indices.contains(lane) { lanes[lane].length = max(1, min(stepCount, n)) } }
+    func length(lane: Int) -> Int         { lanes.indices.contains(lane) ? lanes[lane].length : stepCount }
+    func setDirection(_ d: StepDirection, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].direction = d } }
+    func direction(lane: Int) -> StepDirection { lanes.indices.contains(lane) ? lanes[lane].direction : .forward }
+    func setSolo(_ on: Bool, lane: Int)   { if lanes.indices.contains(lane) { lanes[lane].solo = on } }
+    func isSolo(lane: Int) -> Bool        { lanes.indices.contains(lane) && lanes[lane].solo }
+
+    // Probability / ratchets — lane-wide and per-step (parameter locks)
+    func setLaneProbability(_ pct: Int, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].probability = Array(repeating: max(0, min(100, pct)), count: stepCount) } }
+    func setStepProbability(_ pct: Int, lane: Int, step: Int) { if lanes.indices.contains(lane), lanes[lane].probability.indices.contains(step) { lanes[lane].probability[step] = max(0, min(100, pct)) } }
+    func probability(lane: Int, step: Int) -> Int { lanes.indices.contains(lane) && lanes[lane].probability.indices.contains(step) ? lanes[lane].probability[step] : 100 }
+    func setLaneRatchet(_ r: Int, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].ratchets = Array(repeating: max(1, min(8, r)), count: stepCount) } }
+    func setStepRatchet(_ r: Int, lane: Int, step: Int) { if lanes.indices.contains(lane), lanes[lane].ratchets.indices.contains(step) { lanes[lane].ratchets[step] = max(1, min(8, r)) } }
+    func ratchet(lane: Int, step: Int) -> Int { lanes.indices.contains(lane) && lanes[lane].ratchets.indices.contains(step) ? lanes[lane].ratchets[step] : 1 }
+
+    // Per-step pitch + sound lock
+    func setStepPitch(_ note: Int?, lane: Int, step: Int) { if lanes.indices.contains(lane), lanes[lane].pitches.indices.contains(step) { lanes[lane].pitches[step] = note } }
+    func stepPitch(lane: Int, step: Int) -> Int? { lanes.indices.contains(lane) && lanes[lane].pitches.indices.contains(step) ? lanes[lane].pitches[step] : nil }
+    func setSoundLock(_ idx: Int?, lane: Int, step: Int) { if lanes.indices.contains(lane), lanes[lane].soundLock.indices.contains(step) { lanes[lane].soundLock[step] = idx } }
+    func soundLock(lane: Int, step: Int) -> Int? { lanes.indices.contains(lane) && lanes[lane].soundLock.indices.contains(step) ? lanes[lane].soundLock[step] : nil }
+
+    // Synth (GB-authentic) per lane
+    func setArp(on: Bool, shape: ArpShape, rate: Int, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].arpOn = on; lanes[lane].arpShape = shape; lanes[lane].arpRate = max(1, min(8, rate)) } }
+    func arpInfo(lane: Int) -> (on: Bool, shape: ArpShape, rate: Int) { let l = lanes.indices.contains(lane) ? lanes[lane] : lanes[0]; return (l.arpOn, l.arpShape, l.arpRate) }
+    func setPWM(_ v: Double, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].pwm = max(0, min(1, v)) } }
+    func pwm(lane: Int) -> Double { lanes.indices.contains(lane) ? lanes[lane].pwm : 0 }
+    func setVibrato(depth: Double, rate: Double, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].vibratoDepth = max(0, min(1, depth)); lanes[lane].vibratoRate = max(0.5, min(14, rate)) } }
+    func vibratoInfo(lane: Int) -> (depth: Double, rate: Double) { let l = lanes.indices.contains(lane) ? lanes[lane] : lanes[0]; return (l.vibratoDepth, l.vibratoRate) }
+    func setSoundShuffle(_ on: Bool, lane: Int) { if lanes.indices.contains(lane) { lanes[lane].soundShuffle = on } }
+    func soundShuffle(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].soundShuffle }
+
+    // Wavetable (the WAVE lane's 16-byte / 32-sample table)
+    func setWavetable(_ bytes: [UInt8], lane: Int) { if lanes.indices.contains(lane), bytes.count == 16 { lanes[lane].patch.waveRAM = bytes } }
+    func wavetable(lane: Int) -> [UInt8] { lanes.indices.contains(lane) ? lanes[lane].patch.waveRAM : ChiptunePatch.triangleWave }
+
+    // Generative
+    /// Even (Euclidean) distribution of `hits` across the lane's active length.
+    func euclidean(lane: Int, hits: Int) {
+        guard lanes.indices.contains(lane) else { return }
+        let len = max(1, min(stepCount, lanes[lane].length))
+        let k = max(0, min(len, hits))
+        var steps = [Bool](repeating: false, count: stepCount)
+        if k > 0 { for i in 0 ..< len { steps[i] = (i * k) % len < k } }
+        lanes[lane].steps = steps
+        onPatternChanged?()
+    }
+    /// Nudge the existing pattern: flip a few steps per lane (evolve, don't reset).
+    func mutate(amount: Int = 2) {
+        for li in lanes.indices {
+            let len = max(1, min(stepCount, lanes[li].length))
+            for _ in 0 ..< max(1, amount) { lanes[li].steps[Int.random(in: 0 ..< len)].toggle() }
+        }
+        onPatternChanged?()
+    }
+    /// Build a starter loop in the selected cartridge's voice from the harvested palette.
+    func autoCompose() {
+        clear()
+        for li in lanes.indices {
+            let v = lanes[li].patch.voice
+            // Pick a palette patch for this channel's role, if available.
+            if let pick = palette.first(where: { $0.voice == v }) { lanes[li].patch = pick }
+            switch v {
+            case .pulse2: for s in stride(from: 0, to: 16, by: 4) { lanes[li].steps[s] = true }      // bass on beats
+            case .pulse1: for s in [2, 6, 7, 10, 14, 15] { lanes[li].steps[s] = true }                 // lead off-beats
+            case .wave:   for s in stride(from: 0, to: 16, by: 8) { lanes[li].steps[s] = true }         // pad sustains
+            case .noise:  for s in stride(from: 0, to: 16, by: 2) { lanes[li].steps[s] = true }         // hats
+            }
+        }
+        onPatternChanged?()
+    }
+
+    // Scenes + morph
+    func storeScene(_ b: Bool) { let s = Scene(lanes: lanes); if b { sceneB = s } else { sceneA = s } }
+    func hasScene(_ b: Bool) -> Bool { (b ? sceneB : sceneA) != nil }
+    func recallScene(_ b: Bool) { if let s = (b ? sceneB : sceneA) { lanes = s.lanes; onPatternChanged?() } }
+    /// Crossfade the live pattern from scene A toward scene B (0…1). Needs both stored.
+    func morph(_ t: Double) {
+        guard let a = sceneA?.lanes, let b = sceneB?.lanes else { return }
+        let t = max(0, min(1, t))
+        for li in lanes.indices where li < a.count && li < b.count {
+            for s in 0 ..< stepCount {
+                let av = a[li].steps[s] ? 1.0 : 0.0, bv = b[li].steps[s] ? 1.0 : 0.0
+                lanes[li].steps[s] = (av + (bv - av) * t) > 0.5
+            }
+            lanes[li].volume = a[li].volume + (b[li].volume - a[li].volume) * t
+            lanes[li].rootNote = Int((Double(a[li].rootNote) + Double(b[li].rootNote - a[li].rootNote) * t).rounded())
+        }
+        onPatternChanged?()
+    }
+
+    /// Fire every lane's content at one column (used by the beat-repeat / stutter pad).
+    func triggerColumn(_ col: Int) {
+        let anySolo = lanes.contains { $0.solo }
+        for (li, l) in lanes.enumerated() where !l.muted && (!anySolo || l.solo) {
+            guard l.steps.indices.contains(col), l.steps[col] else { continue }
+            trigger(l.patch, note: l.pitches[col] ?? l.rootNote, volume: l.volume, lane: li)
+        }
+    }
+
+    // Output tap for WAV export (real-time capture of the live, FX'd output).
+    func installOutputTap(_ block: @escaping (AVAudioPCMBuffer, AVAudioTime) -> Void) {
+        guard let mix = masterMixer else { return }
+        mix.installTap(onBus: 0, bufferSize: 4096, format: mix.outputFormat(forBus: 0), block: block)
+    }
+    func removeOutputTap() { masterMixer?.removeTap(onBus: 0) }
+    /// One loop's duration in seconds (for sizing an export).
+    var loopSeconds: Double { 60.0 / Double(bpm) / Double(stepsPerBeat) * Double(stepCount) }
+
     /// Audition a patch live (a soundboard hit).
     func audition(_ patch: ChiptunePatch, note: Int) { trigger(patch, note: note, volume: 0.9) }
 
@@ -228,6 +418,8 @@ final class ChiptuneEngine {
         apu.write(0xFF26, 0x00)
         powerOn()
         glides.removeAll()
+        mods.removeAll()
+        pending.removeAll()
         delayFX.reset()
         reverbFX.reset()
     }
@@ -242,6 +434,11 @@ final class ChiptuneEngine {
         isPlaying = true
         currentStep = -1
         stepAccum = 0
+        clockTime = 0
+        pumpPhase = 0
+        pending.removeAll()
+        lanePos = [Int](repeating: -1, count: lanes.count)
+        laneDirSign = [Int](repeating: 1, count: lanes.count)
     }
 
     func stop() {
@@ -260,12 +457,16 @@ final class ChiptuneEngine {
         if let fmt = AVAudioFormat(standardFormatWithSampleRate: APU.sampleRate, channels: 2) {
             let ring = apu.ring
             let engine = AVAudioEngine()
+            let scopeBuf = self.scopeBuf
+            var sIdx = 0
             let src = AVAudioSourceNode(format: fmt) { _, _, frames, abl -> OSStatus in
                 let bufs = UnsafeMutableAudioBufferListPointer(abl)
                 guard bufs.count >= 2,
                       let l = bufs[0].mData?.assumingMemoryBound(to: Float.self),
                       let r = bufs[1].mData?.assumingMemoryBound(to: Float.self) else { return noErr }
-                ring.readDeinterleaved(left: l, right: r, frames: Int(frames))
+                let n = Int(frames)
+                ring.readDeinterleaved(left: l, right: r, frames: n)
+                for i in 0 ..< n { scopeBuf[sIdx] = l[i]; sIdx = (sIdx + 1) & (ChiptuneEngine.scopeCount - 1) }
                 return noErr
             }
             // src → filter → drive → delay → reverb → mixer
@@ -275,6 +476,7 @@ final class ChiptuneEngine {
             engine.connect(dist, to: delayFX, format: fmt)
             engine.connect(delayFX, to: reverbFX, format: fmt)
             engine.connect(reverbFX, to: engine.mainMixerNode, format: fmt)
+            masterMixer = engine.mainMixerNode   // pump (sidechain) ducks this
             updateDelayTime()
             try? engine.start()
             audio = engine
@@ -310,7 +512,8 @@ final class ChiptuneEngine {
         var guardCount = 0
         while apu.ring.fill < target && guardCount < 64 {
             if isPlaying { advanceSequencer(by: chunkSeconds) }
-            if !glides.isEmpty { advanceGlides(by: chunkSeconds) }
+            advanceModulation(by: chunkSeconds)   // glides + vibrato/PWM, even while stopped
+            updatePump(by: chunkSeconds)
             apu.step(chunkCycles)
             apu.flush()
             guardCount += 1
@@ -318,6 +521,8 @@ final class ChiptuneEngine {
     }
 
     private func advanceSequencer(by seconds: Double) {
+        clockTime += seconds
+        firePending()
         let base = 60.0 / Double(bpm) / Double(stepsPerBeat)
         let sw = max(0, min(0.6, swing))
         stepAccum += seconds
@@ -329,14 +534,79 @@ final class ChiptuneEngine {
             if stepAccum < threshold { break }
             stepAccum -= threshold
             currentStep = next
-            fireStep(currentStep)
+            stepBoundary(stepDur: base)
             onStep?(currentStep)
         }
     }
 
-    /// Advance any active pitch slides (Glide), writing the channel frequency without
-    /// retriggering so the note bends from the previous pitch to the new one.
-    private func advanceGlides(by dt: Double) {
+    /// At each 16th-note boundary, advance every lane independently (polymeter + direction)
+    /// and schedule its hits (probability, ratchets, arpeggio, per-step pitch / sound lock).
+    private func stepBoundary(stepDur: Double) {
+        let anySolo = lanes.contains { $0.solo }
+        for li in lanes.indices {
+            let l = lanes[li]
+            let len = max(1, min(stepCount, l.length))
+            let pos = nextPos(lane: li, length: len)
+            guard !l.muted, !anySolo || l.solo, l.steps[pos] else { continue }
+            if l.probability[pos] < 100, Int.random(in: 0 ..< 100) >= l.probability[pos] { continue }
+            let note = l.pitches[pos] ?? l.rootNote
+            var patch = l.soundLock[pos].flatMap { palette.indices.contains($0) ? palette[$0] : nil } ?? l.patch
+            if l.soundShuffle {
+                let pool = palette.filter { $0.voice == l.patch.voice }
+                if let pick = pool.randomElement() { patch = pick }
+            }
+            if l.arpOn {
+                let offs = l.arpShape.offsets
+                let n = max(1, min(8, l.arpRate))
+                for k in 0 ..< n {
+                    pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(n),
+                                              lane: li, note: note + offs[k % offs.count],
+                                              volume: l.volume, patch: patch))
+                }
+            } else {
+                let r = max(1, min(8, l.ratchets[pos]))
+                for k in 0 ..< r {
+                    pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(r),
+                                              lane: li, note: note, volume: l.volume, patch: patch))
+                }
+            }
+        }
+    }
+
+    private func nextPos(lane: Int, length: Int) -> Int {
+        var p = lanePos[lane]
+        switch lanes[lane].direction {
+        case .forward: p = (p + 1) % length
+        case .reverse: p = (p - 1 + length) % length
+        case .random:  p = Int.random(in: 0 ..< length)
+        case .pingpong:
+            if length <= 1 { p = 0 } else {
+                p += laneDirSign[lane]
+                if p >= length - 1 { p = length - 1; laneDirSign[lane] = -1 }
+                else if p <= 0 { p = 0; laneDirSign[lane] = 1 }
+            }
+        }
+        if p < 0 || p >= length { p = 0 }   // safety if length shrank under us
+        lanePos[lane] = p
+        return p
+    }
+
+    private func firePending() {
+        guard !pending.isEmpty else { return }
+        var i = 0
+        while i < pending.count {
+            if pending[i].due <= clockTime {
+                let h = pending.remove(at: i)
+                trigger(h.patch, note: h.note, volume: h.volume, lane: h.lane)
+            } else { i += 1 }
+        }
+    }
+
+    /// The per-lane playhead position (for grid highlighting under polymeter).
+    func playheadPos(lane: Int) -> Int { lanePos.indices.contains(lane) ? lanePos[lane] : -1 }
+
+    /// Advance pitch slides (Glide) and note modulation (vibrato + PWM) for held notes.
+    private func advanceModulation(by dt: Double) {
         for (lane, g0) in glides {
             var g = g0
             g.t += dt
@@ -345,13 +615,38 @@ final class ChiptuneEngine {
             writeFreq(g.voice, cur, trigger: false)
             if f >= 1 { glides[lane] = nil } else { glides[lane] = g }
         }
-    }
-
-    private func fireStep(_ i: Int) {
-        for (lane, l) in lanes.enumerated() where !l.muted && l.steps[i] {
-            trigger(l.patch, note: l.rootNote, volume: l.volume, lane: lane)
+        guard !mods.isEmpty else { return }
+        for (lane, m0) in mods {
+            var m = m0
+            m.t += dt
+            if m.t > gateMs / 1000 { mods[lane] = nil; continue }
+            // Vibrato: ± up to a semitone, only if this lane isn't mid-glide.
+            if m.vibDepth > 0, glides[lane] == nil, m.voice != .noise {
+                let cents = sin(2 * .pi * m.vibRate * m.t) * m.vibDepth * 50
+                let p = ChipNote.period(hz: ChipNote.hz(m.note) * pow(2, cents / 1200))
+                writeFreq(m.voice, p, trigger: false)
+            }
+            // PWM: walk the pulse duty over the note (pulse channels only).
+            if m.pwm > 0, m.voice == .pulse1 || m.voice == .pulse2 {
+                let duty = Int((m.t * (1 + m.pwm * 12)) ) % 4
+                let reg: UInt16 = m.voice == .pulse1 ? 0xFF11 : 0xFF16
+                apu.write(reg, UInt8((duty & 3) << 6) | pulseLen)
+            }
+            mods[lane] = m
         }
     }
+
+    private func updatePump(by dt: Double) {
+        guard let mix = masterMixer else { return }
+        if pumpDepth <= 0 { mix.outputVolume = 1; return }
+        let base = 60.0 / Double(bpm) / Double(stepsPerBeat)
+        let window = base * Double(max(1, pumpDivision))
+        pumpPhase += dt / window
+        if pumpPhase >= 1 { pumpPhase -= floor(pumpPhase) }
+        // Fast drop at the downbeat, linear recovery across the window.
+        mix.outputVolume = Float(1 - pumpDepth * (1 - pumpPhase))
+    }
+    private var pumpPhase: Double = 0
 
     // MARK: Register recipes
 
@@ -423,6 +718,15 @@ final class ChiptuneEngine {
         if let lane {
             if patch.voice != .noise { lastNote[lane] = note }
             glides[lane] = glideTo.map { Glide(from: startP, to: $0, t: 0, dur: 0.08, voice: patch.voice) }
+            // Set up per-note vibrato / PWM modulation for this lane (pitched channels only).
+            let cfg = lanes.indices.contains(lane) ? lanes[lane] : nil
+            if let cfg, patch.voice != .noise, cfg.vibratoDepth > 0 || cfg.pwm > 0 {
+                mods[lane] = Mod(note: note, voice: patch.voice, t: 0,
+                                 vibDepth: cfg.vibratoDepth, vibRate: cfg.vibratoRate,
+                                 pwm: cfg.pwm, duty: patch.duty)
+            } else {
+                mods[lane] = nil
+            }
         }
     }
 }

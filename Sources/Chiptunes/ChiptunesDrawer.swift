@@ -10,7 +10,7 @@ import Cocoa
 
 // MARK: - Voice palette (themed)
 
-private func voiceColor(_ v: ChipVoice) -> NSColor {
+func voiceColor(_ v: ChipVoice) -> NSColor {
     switch v {
     case .pulse1: return theme.keyCoral
     case .pulse2: return theme.keyBlue
@@ -397,6 +397,12 @@ final class ChiptunesDrawer: NSView {
     private var pitchKnobs: [(knob: ChipKnob, def: Double)] = [] // per-lane pitch, also restored by Reset
     private var keyMonitor: Any?                             // QWERTY → keyboard, while the drawer is open
 
+    // Advanced feature panels (built by their own files; the drawer just mounts them).
+    private var featurePanels: [NSView] = []
+    private var panelTabs: NSSegmentedControl?
+    private var recArmedLane: Int? = nil   // step-record: keyboard notes land on this lane
+    private var recCursor = 0              // step-record write position
+
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
@@ -404,10 +410,22 @@ final class ChiptunesDrawer: NSView {
         layer?.masksToBounds = true // clip cleanly when collapsed to 0 height
         build()
         engine.onStep = { [weak self] step in self?.highlight(step) }
+        // Pattern data changed by a panel (mutate / euclidean / auto-compose / morph) → redraw grid.
+        engine.onPatternChanged = { [weak self] in self?.refreshSteps() }
+        // Palette changed (ROM mashup) → refresh the lane menus + keyboard list.
+        engine.onPaletteChanged = { [weak self] in
+            guard let self else { return }
+            self.loadKeyboardSounds(self.engine.palette)
+            self.populateMenus(self.engine.palette)
+        }
         loadKeyboardSounds(ChiptunePatch.builtIns)
         populateMenus(ChiptunePatch.builtIns)
     }
     required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func panelTabChanged(_ sender: NSSegmentedControl) {
+        for (i, p) in featurePanels.enumerated() { p.isHidden = (i != sender.selectedSegment) }
+    }
 
     // MARK: Build
 
@@ -499,20 +517,63 @@ final class ChiptunesDrawer: NSView {
         keyboard.onNote = { [weak self] note in
             guard let self, let patch = self.kbPatch else { return }
             self.engine.playKey(patch, note: note, throughFX: self.kbUseFX)
+            // Step-record: lay the played note onto the armed lane and advance the cursor.
+            if let lane = self.recArmedLane {
+                let step = self.recCursor % self.engine.stepCount
+                if !self.engine.isStepOn(lane: lane, step: step) { self.engine.toggleStep(lane: lane, step: step) }
+                self.engine.setStepPitch(note, lane: lane, step: step)
+                self.recCursor += 1
+                self.refreshSteps()
+            }
         }
 
+        // Step-record arm: when a lane is armed, keyboard notes write into its steps.
+        let recToggle = SettingToggle()
+        recToggle.setAccessibilityName("Step record. Arm the keyboard to write notes into the selected lane")
+        recToggle.onToggle = { [weak self] on in self?.recArmedLane = on ? 0 : nil }
+
         let kbControls = NSStackView(views: [kbCaption, kbMenu, spacer(20),
-                                             labeledControl(kbFXToggle, "Use FX")])
+                                             labeledControl(kbFXToggle, "Use FX"),
+                                             spacer(10), labeledControl(recToggle, "Rec→PUL1")])
         kbControls.orientation = .horizontal
         kbControls.alignment = .centerY
         kbControls.spacing = 8
         kbControls.translatesAutoresizingMaskIntoConstraints = false
 
+        // --- Advanced feature panels (each built in its own file; the drawer mounts them) ---
+        let onChange: () -> Void = { [weak self] in self?.refreshSteps() }
+        let panels: [(String, NSView)] = [
+            ("Rhythm",  RhythmPanel(engine: engine, onChange: onChange)),
+            ("Timbre",  TimbrePanel(engine: engine, onChange: onChange)),
+            ("Perform", PerformancePanel(engine: engine, onChange: onChange)),
+            ("Visual",  OutputPanel(engine: engine, onChange: onChange)),
+            ("ROM",     ROMToolsPanel(engine: engine, onChange: onChange)),
+        ]
+        featurePanels = panels.map { $0.1 }
+        let tabs = NSSegmentedControl(labels: panels.map { $0.0 }, trackingMode: .selectOne,
+                                      target: self, action: #selector(panelTabChanged(_:)))
+        tabs.selectedSegment = 0
+        tabs.translatesAutoresizingMaskIntoConstraints = false
+        panelTabs = tabs
+        let host = NSView()
+        host.translatesAutoresizingMaskIntoConstraints = false
+        for (i, p) in panels.enumerated() {
+            p.1.translatesAutoresizingMaskIntoConstraints = false
+            p.1.isHidden = (i != 0)
+            host.addSubview(p.1)
+            NSLayoutConstraint.activate([
+                p.1.topAnchor.constraint(equalTo: host.topAnchor),
+                p.1.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+                p.1.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+                p.1.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            ])
+        }
+
         status.font = theme.fontCaption
         status.textColor = theme.textFaint
         status.translatesAutoresizingMaskIntoConstraints = false
 
-        for v in [transport, grid, kbControls, keyboard, status] { addSubview(v) }
+        for v in [transport, grid, kbControls, keyboard, tabs, host, status] { addSubview(v) }
         NSLayoutConstraint.activate([
             transport.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 14),
             transport.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
@@ -529,7 +590,15 @@ final class ChiptunesDrawer: NSView {
             keyboard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
             keyboard.heightAnchor.constraint(equalToConstant: 58),
 
-            status.topAnchor.constraint(equalTo: keyboard.bottomAnchor, constant: 8),
+            tabs.topAnchor.constraint(equalTo: keyboard.bottomAnchor, constant: 12),
+            tabs.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+
+            host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 8),
+            host.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            host.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            host.heightAnchor.constraint(equalToConstant: 124),
+
+            status.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 8),
             status.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
         ])
 
@@ -714,6 +783,7 @@ final class ChiptunesDrawer: NSView {
     /// Fill the keyboard's sound picker with the whole sampled library (every channel's sounds).
     private func loadKeyboardSounds(_ patches: [ChiptunePatch]) {
         kbPatches = patches.isEmpty ? ChiptunePatch.builtIns : patches
+        engine.palette = kbPatches   // keep the engine's palette (locks/shuffle/auto-compose) in sync
         kbMenu.removeAllItems()
         kbMenu.addItems(withTitles: kbPatches.map { theme.cased("\($0.name) · \($0.voice.short)") })
         kbMenu.selectItem(at: 0)

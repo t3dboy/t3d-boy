@@ -4,6 +4,11 @@ import Cocoa
 import CryptoKit
 import ImageIO
 
+extension Notification.Name {
+    /// A ROM's box art changed (e.g. the in-game capture button). userInfo["rom"] = URL.
+    static let thumbnailUpdated = Notification.Name("t3dboy.thumbnailUpdated")
+}
+
 // Generates and caches "box art" by booting each ROM headlessly in the
 // emulator core and capturing its title screen.
 final class ThumbnailStore {
@@ -25,6 +30,18 @@ final class ThumbnailStore {
         let hex = Insecure.MD5.hash(data: Data(key.utf8))
             .map { String(format: "%02x", $0) }.joined()
         return dir.appendingPathComponent(hex + ".png")
+    }
+
+    /// Manually override a ROM's box art (the in-game "capture title screen" button).
+    /// Updates the in-memory cache immediately, persists the PNG, and notifies any library
+    /// showing this ROM to refresh.
+    func setArt(_ image: CGImage, for rom: URL) {
+        cache[rom] = image
+        let file = cacheFile(for: rom)
+        queue.async { _ = writePNG(image, to: file) }
+        // Carry the image so observers can update instantly, without a cache round-trip.
+        NotificationCenter.default.post(name: .thumbnailUpdated, object: nil,
+                                        userInfo: ["rom": rom, "image": image])
     }
 
     func art(for rom: URL, completion: @escaping (CGImage?) -> Void) {
@@ -526,7 +543,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let chiptunesDrawer = ChiptunesDrawer()
     private var chiptunesOpen = false
     private var chiptunesHeightConstraint: NSLayoutConstraint!
-    private let chiptunesBaseHeight: CGFloat = 372
+    private let chiptunesBaseHeight: CGFloat = 540
     private let chiptunesBonusHeight: CGFloat = 60 // extra room when the achievements drawer is open
     private var barHeight: CGFloat { ChiptunesDrawer.barHeight } // the always-visible launcher bar
     /// Drawer height when closed (just the bar) and open (bar + instrument).
@@ -571,13 +588,34 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         NotificationCenter.default.addObserver(
             forName: PlayStats.changed, object: nil, queue: .main
         ) { [weak self] _ in
-            self?.refreshSelectedStats()
-            self?.tableView.reloadData() // keep per-row stats current
+            guard let self else { return }
+            self.refreshSelectedStats()
+            // reloadData() clears the table selection in this view-based table; restore it,
+            // or the Play button silently stops working after a game records playtime on exit.
+            let selected = self.tableView.selectedRow
+            self.tableView.reloadData() // keep per-row stats current
+            if selected >= 0, selected < self.roms.count {
+                self.tableView.selectRowIndexes([selected], byExtendingSelection: false)
+            }
         }
         // Keep the housing switches + art preview in sync when toggled elsewhere
         NotificationCenter.default.addObserver(
             forName: .screenEffectsChanged, object: nil, queue: .main
         ) { [weak self] _ in self?.syncEffectsUI() }
+
+        // Refresh the big art the instant a game captures a new title screen as its box art.
+        NotificationCenter.default.addObserver(
+            forName: .thumbnailUpdated, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, let rom = note.userInfo?["rom"] as? URL,
+                  self.tableView.selectedRow >= 0, self.tableView.selectedRow < self.roms.count,
+                  self.roms[self.tableView.selectedRow] == rom else { return }
+            if let image = note.userInfo?["image"], CFGetTypeID(image as CFTypeRef) == CGImage.typeID {
+                self.artView.image = (image as! CGImage)   // immediate — no round-trip
+            } else {
+                ThumbnailStore.shared.art(for: rom) { [weak self] image in self?.artView.image = image }
+            }
+        }
 
         // Re-read ambient light a few times a second so the art preview dims
         // live as the room (and the user's screen brightness) changes

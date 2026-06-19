@@ -2,6 +2,20 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [3.2.0] — 2026-06-19
+
+### Added
+- **Capture box art from the game** — a new art button (🖼) on the in-game control bar
+  saves the screen you're currently on as that ROM's box art. Useful when the
+  auto-generated cover caught a publisher logo or a blank frame instead of the title
+  screen: get to the screen you want, click the button, and the library cover updates
+  instantly.
+
+### Fixed
+- **Play Game no longer stops working after you exit a game.** Recording playtime on exit
+  refreshed the ROM list, which cleared the table selection — so the next Play press had no
+  selected game and silently did nothing. The selection is now preserved across the refresh.
+
 ## [3.1.1] — 2026-06-19
 
 ### Fixed

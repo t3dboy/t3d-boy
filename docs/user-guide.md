@@ -75,6 +75,7 @@ the bottom of the window:
 |---|---|
 | ☀ Hardcore Lighting | Toggle ambient-light dimming |
 | 🔦 Worm Light | Toggle the clip-on light |
+| 🖼 Capture box art | Save the screen you're on now as this game's box art — handy when the auto-generated cover landed on a logo or a blank frame. Get to the title/menu screen and click it; the cover updates in the library. |
 | ⤢ Full Screen | Enter / leave full screen |
 | ⏻ Exit | Power the game off (reverse zoom + click) and return to the library |
 

@@ -282,6 +282,15 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         })
     }
 
+    /// Capture the live screen and use it as this ROM's box art (the control-bar art button).
+    /// Lets you set the cover to the title/menu screen by hand when the auto-generated one
+    /// landed on a logo or a blank frame.
+    private func captureBoxArt() {
+        guard let image = makeImage(from: gb.mmu.ppu.framebuffer) else { return }
+        ThumbnailStore.shared.setArt(image, for: romURL)
+        A11y.announce("Box art captured")
+    }
+
     private func centeredFocusedFrame() -> NSRect {
         guard let window, let screen = window.screen ?? NSScreen.main else {
             return window?.frame ?? .zero
@@ -347,6 +356,7 @@ final class GameWindowController: NSWindowController, NSWindowDelegate, NSMenuIt
         controlBar.onToggleT3dLight = { T3dBoyLight.isEnabled.toggle() }
         controlBar.onFullScreen = { [weak self] in self?.window?.toggleFullScreen(nil) }
         controlBar.onExit = { [weak self] in self?.exitFocus() }
+        controlBar.onCaptureArt = { [weak self] in self?.captureBoxArt() }
         let hoverHandler: (Bool) -> Void = { [weak self] hovering in
             guard let self else { return }
             self.hoveringControls = hovering

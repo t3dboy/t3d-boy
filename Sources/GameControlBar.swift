@@ -13,6 +13,7 @@ final class GameControlBar: NSView {
     var onToggleT3dLight: (() -> Void)?
     var onFullScreen: (() -> Void)?
     var onExit: (() -> Void)?
+    var onCaptureArt: (() -> Void)?
     var onHoverChange: ((Bool) -> Void)?
     /// T3d Boy Light isn't offered for Game Boy Color games (it never existed on the GBC).
     var t3dLightAvailable = true { didSet { refreshStates() } }
@@ -20,6 +21,7 @@ final class GameControlBar: NSView {
     private let hardcoreBtn = GameControlBar.button("sun.max", "Hardcore Lighting")
     private let wormBtn = GameControlBar.button("flashlight.on.fill", "Worm Light")
     private let t3dLightBtn = GameControlBar.button("lightbulb.fill", "T3d Boy Light")
+    private let captureBtn = GameControlBar.button("photo.artframe", "Capture this screen as box art")
     private let fullBtn = GameControlBar.button("arrow.up.left.and.arrow.down.right", "Full Screen")
     private let exitBtn = GameControlBar.button("power", "Exit")
 
@@ -37,7 +39,8 @@ final class GameControlBar: NSView {
         blur.translatesAutoresizingMaskIntoConstraints = false
         addSubview(blur)
 
-        let stack = NSStackView(views: [hardcoreBtn, wormBtn, t3dLightBtn, separator(), fullBtn, exitBtn])
+        let stack = NSStackView(views: [hardcoreBtn, wormBtn, t3dLightBtn, separator(),
+                                        captureBtn, fullBtn, exitBtn])
         stack.orientation = .horizontal
         stack.spacing = 4
         stack.alignment = .centerY
@@ -59,6 +62,7 @@ final class GameControlBar: NSView {
         hardcoreBtn.target = self; hardcoreBtn.action = #selector(tapHardcore)
         wormBtn.target = self;     wormBtn.action = #selector(tapWorm)
         t3dLightBtn.target = self; t3dLightBtn.action = #selector(tapT3dLight)
+        captureBtn.target = self;  captureBtn.action = #selector(tapCapture)
         fullBtn.target = self;     fullBtn.action = #selector(tapFull)
         exitBtn.target = self;     exitBtn.action = #selector(tapExit)
         refreshStates()
@@ -94,8 +98,23 @@ final class GameControlBar: NSView {
     @objc private func tapHardcore() { onToggleHardcore?(); refreshStates() }
     @objc private func tapWorm() { onToggleWorm?(); refreshStates() }
     @objc private func tapT3dLight() { onToggleT3dLight?(); refreshStates() }
+    @objc private func tapCapture() { onCaptureArt?(); confirmCapture() }
     @objc private func tapFull() { onFullScreen?() }
     @objc private func tapExit() { onExit?() }
+
+    /// Brief green flash + checkmark on the capture button to confirm the box art was saved.
+    func confirmCapture() {
+        let saved = NSImage(systemSymbolName: "checkmark.circle.fill", accessibilityDescription: "Box art saved")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+        captureBtn.image = saved
+        captureBtn.contentTintColor = theme.star
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
+            self?.captureBtn.image = NSImage(systemSymbolName: "photo.artframe",
+                                             accessibilityDescription: "Capture this screen as box art")?
+                .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 14, weight: .medium))
+            self?.captureBtn.contentTintColor = NSColor.white.withAlphaComponent(0.78)
+        }
+    }
 
     /// Tint the lighting toggles when active so their state reads at a glance.
     func refreshStates() {
