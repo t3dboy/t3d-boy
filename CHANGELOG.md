@@ -2,6 +2,36 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [3.1.0] — 2026-06-19
+
+T3d Tunes grows up — a full synth FX rack, per-lane glide, and a playable keyboard.
+
+### Added
+- **Synth FX rack** on the sequencer transport — six knobs colouring the whole instrument:
+  **Cutoff** (resonant low-pass) and **Res** (resonance), **Drive** (drive/bit-crush),
+  **Delay** (tempo-synced echo), **Reverb** (hall), and **Swing** (groove on the off-beats).
+  They run as a real signal chain on the output, so they shape the loop and the keyboard.
+- **Per-lane Glide** — a portamento switch on each pitched lane (Pulse 1, Pulse 2, Wave) that
+  slides the pitch between consecutive notes.
+- **Playable keyboard** — a two-octave (C3–C5) keyboard replaces the old pad soundboard. A
+  **Keyboard** dropdown picks any sound from the whole sampled library, and a **Use FX**
+  switch plays it dry or through the FX knobs.
+  - **Computer-keyboard mapping** — every key has a shortcut, mapped chromatically from C3:
+    `QWERTYUIOP`, then `ASDFGHJKL`, then `ZXCVBN`. The bound letter is printed on each key.
+- **Reset** (↺) button — returns every FX knob, Swing, all Glide switches and the per-lane
+  pitch knobs to their defaults, and flushes any delay/reverb tail.
+- **Dice** (🎲) button — randomises the pattern across all four lanes.
+
+### Changed
+- The sequencer's play button is now **Play Sequencer** (and the library's is **Play Game**),
+  to tell them apart.
+- Pitch and FX knobs are easier to turn — drag *or* scroll-wheel, a larger hit target, and
+  the conventional rest position (lowest fully left, highest fully right).
+
+### Fixed
+- Clearing or stopping the sequencer now fully flushes the delay/reverb tails, so nothing
+  keeps ringing in the background.
+
 ## [3.0.0] — 2026-06-19
 
 A major release built around **T3d Tunes** — the Game Boy's sound chip as a playable
@@ -9,8 +39,8 @@ instrument.
 
 ### Added
 - **T3d Tunes** — a looping chiptune synth/soundboard, detached from the emulator. A drawer
-  slides up from the bottom of the library (full-width **T3d Tunes** bar) with a Teenage
-  Engineering-style 16-step looper across the four Game Boy channels (Pulse 1, Pulse 2,
+  slides up from the bottom of the library (full-width **T3d Tunes** bar) with a
+  boutique-synth-style 16-step looper across the four Game Boy channels (Pulse 1, Pulse 2,
   Wave, Noise):
   - **Samples the selected ROM's sounds** — runs the game headlessly and captures the
     distinct instrument "recipes" it uses (pulse duty + envelope, the wave channel's custom

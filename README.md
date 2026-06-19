@@ -12,8 +12,11 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   pulse, wave, noise). The clever part: it **samples the sounds of whatever ROM you've
   selected** — running it headlessly and capturing the actual duty/envelope, wavetables
   and noise tones the game uses — then lets you pick those sounds per channel and lay them
-  into a loop. Browse the library and the loop keeps grooving with each game's audio
-  swapped in. See **[docs/sound-chip.md](docs/sound-chip.md)** for how it works.
+  into a loop. Shape it with a rack of synth knobs — **filter cutoff & resonance, drive,
+  delay, reverb and swing** — plus **per-lane glide**, and perform over the top on a built-in
+  **keyboard** you can play with the mouse or your computer keys (full QWERTY mapping). Browse
+  the library and the loop keeps grooving with each game's audio swapped in.
+  See **[docs/sound-chip.md](docs/sound-chip.md)** for how it works.
 
   ![T3d Tunes — the looping chiptune instrument](tools/screenshot-tunes.png)
 

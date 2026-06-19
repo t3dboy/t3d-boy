@@ -220,10 +220,20 @@ bar along the bottom of the library — it slides up, growing the window taller.
   the wave channel's custom waveforms, noise percussion.
 - **Four lanes = the four Game Boy channels** — Pulse 1, Pulse 2, Wave, Noise. Each lane
   has a **dropdown** to choose which of that channel's captured sounds it plays, a **16-step
-  grid** (tap to lay the sound into the loop), a **pitch knob**, and a **mute**.
-- **Transport** — Play/Stop and a BPM control. **Clear** empties the loop and stops it.
-- **Pad bank** — the row of coloured pads is a live soundboard; tap one to play that sound
-  over the loop.
+  grid** (tap to lay the sound into the loop), a **Glide** switch (portamento — slides the
+  pitch between notes; pitched lanes only), a **pitch knob**, and a **mute**.
+- **Transport** — **Play Sequencer**/Stop and a BPM control. **Clear** empties the loop and
+  stops it.
+- **Synth FX** — a rack of knobs to the right of Clear shapes the whole instrument:
+  **Cutoff** and **Res** (a resonant low-pass filter), **Drive** (grit/bit-crush), **Delay**
+  (tempo-synced echo), **Reverb** (space), and **Swing** (groove on the off-beats). **Reset**
+  (↺) returns everything — FX, Swing, Glide and pitch — to neutral; **Dice** (🎲) rolls a
+  random pattern.
+- **Keyboard** — a playable two-octave keyboard (C3–C5) along the bottom. Choose any sound
+  from the whole sampled library in its **Keyboard** dropdown, then play it by clicking or
+  from your computer keyboard: keys are mapped chromatically from C3 — `QWERTYUIOP`, then
+  `ASDFGHJKL`, then `ZXCVBN` (the bound letter is printed on each key). The **Use FX** switch
+  plays the keyboard dry, or through the FX knobs.
 - **Browse while it plays** — select another game and the loop keeps running with that
   game's sounds swapped in, so you can hear your pattern in any cartridge's voice.
 

@@ -188,17 +188,61 @@ the register recipes are captured, so each sound is regenerated live by the chip
 
 ### The looper
 
+The drawer has four parts: a **transport + FX row** across the top, the four **lanes**, a
+**playable keyboard** along the bottom, and a status line.
+
 - **Four lanes = the four channels.** Each lane has a **dropdown** of the sounds harvested
-  for that channel — this is how you reach every captured timbre — plus a **pitch knob**, a
-  **mute**, and a **16-step grid**. Toggling a step schedules that lane's patch to trigger on
-  that step.
-- **Transport.** Play/Stop and a BPM control. The sequencer advances 16th-notes; on each step
-  boundary it triggers the active steps' patches.
-- **The pad bank** along the bottom is a live soundboard — tap a pad to play that sound now,
-  over the loop, for performing.
+  for that channel — this is how you reach every captured timbre — plus a per-lane **Glide**
+  switch, a **pitch knob**, a **mute**, and a **16-step grid**. Toggling a step schedules
+  that lane's patch to trigger on that step.
+- **Transport.** Play/Stop, a BPM control, and **Clear** (empties the loop and silences
+  everything). The sequencer advances 16th-notes; on each step boundary it triggers the
+  active steps' patches.
 - **Pitch.** Pulse/wave lanes are transposed by the pitch knob (note → frequency as above).
   The noise lane has no musical pitch, so its knob nudges the LFSR clock-shift to make the
-  noise brighter or darker.
+  noise brighter or darker. The knobs sweep the conventional way — lowest fully left,
+  highest fully right.
+
+### The synth FX and groove
+
+To the right of **Clear** sits a row of knobs and buttons that colour the whole instrument.
+The five effects run as a real signal chain on the output (**filter → drive → delay →
+reverb**), so they shape the loop *and* the keyboard:
+
+| Control | What it does |
+|---------|--------------|
+| **Cutoff** | A resonant low-pass filter. Fully right is wide open; turn left to muffle. Log-mapped ~200 Hz → 20 kHz. |
+| **Res** | Resonance — a volume peak right at the cutoff, for the "wah"/squelch as you sweep Cutoff. |
+| **Drive** | Drive / bit-crush — grit and dirt, from a little warmth up to full crunch. |
+| **Delay** | A tempo-synced echo (an eighth-note at the current BPM); the knob raises both mix and feedback. |
+| **Reverb** | A hall reverb for space and tail. |
+| **Swing** | Groove — delays the off-beat 16th-notes so the loop shuffles instead of sounding straight. |
+
+A few more controls finish the row:
+
+- **Glide** *(per lane)* — the switch on each pitched lane (PUL1, PUL2, WAVE) turns on
+  **portamento**: instead of jumping, the pitch *slides* from the previous note to the next.
+  Great for rubbery basslines and lead swoops. (The noise lane has no pitch, so no Glide.)
+- **Reset** (↺) — snaps every FX knob, Swing, all Glide switches, and the per-lane pitch
+  knobs back to their defaults, and flushes any delay/reverb tail.
+- **Dice** (🎲) — randomises the pattern across all four lanes for instant inspiration.
+
+### The keyboard
+
+Along the bottom is a **playable two-octave keyboard** (C3–C5) — a live soundboard to perform
+over the loop, or just to audition sounds:
+
+- **Pick the sound** from the **Keyboard** dropdown. It lists the *entire* sampled library —
+  every channel's captured sounds — each tagged with the channel it came from.
+- **Play it** by clicking the keys, or straight from your computer keyboard. The keys are
+  mapped left-to-right, chromatically, from the lowest key (C3): `Q W E R T Y U I O P`, then
+  `A S D F G H J K L`, then `Z X C V B N` — so **all 25 keys have a shortcut**, and the bound
+  letter is printed on each key. Typing is captured only while the drawer is open and you're
+  not editing a text field.
+- **Use FX** — a switch deciding whether the keyboard plays *through* the FX knobs above or
+  **dry**. Off by default, so you hear the raw sampled sound; flip it on to play through your
+  dialled-in filter, delay and reverb. (The running loop always honours the FX; this switch
+  only changes the keyboard, and only while the sequencer is stopped.)
 
 ### Note gating — why notes don't drone
 
@@ -221,9 +265,13 @@ sampled. You can audition the musical character of your whole library without st
 2. Pick a game — its sounds are sampled automatically.
 3. For each lane, choose a sound from its dropdown (Pulse 1 for a lead, Pulse 2 for a bass,
    Wave for a pad/organ, Noise for drums).
-4. Tap steps to build a beat; set each lane's pitch with its knob.
-5. Hit **Play**. Tweak the BPM, mute lanes, tap pads to perform over the top.
-6. Select a different game to hear your same pattern in another cartridge's voice.
+4. Tap steps to build a beat; set each lane's pitch with its knob, and flip on **Glide** for
+   a lane you want to slide.
+5. Dial in the **FX** — Cutoff/Res for filter sweeps, Drive for grit, Delay and Reverb for
+   space — and add **Swing** for groove. **Reset** returns everything to neutral; **Dice**
+   rolls a random pattern.
+6. Hit **Play**. Perform over the top on the **keyboard** (click it or type `QWERTYUIOP…`),
+   and select a different game to hear your pattern in another cartridge's voice.
 
 That's the Game Boy sound chip — four little tone generators and a frame sequencer — turned
 into a sampler-fed loop machine.

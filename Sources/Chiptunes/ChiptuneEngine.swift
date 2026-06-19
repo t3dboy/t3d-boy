@@ -99,10 +99,23 @@ final class ChiptuneEngine {
     private var audio: AVAudioEngine?
     private var timer: Timer?
 
+    // Output FX — real audio units inserted into the signal chain (synth-style controls).
+    private let eq = AVAudioUnitEQ(numberOfBands: 1)   // sweepable resonant low-pass
+    private let dist = AVAudioUnitDistortion()          // drive / crush
+    private let delayFX = AVAudioUnitDelay()            // tempo-synced echo
+    private let reverbFX = AVAudioUnitReverb()          // space
+
+    // Sequencer feel
+    var swing: Double = 0       // 0…0.6 — delays the off-beat steps
+    var glideEnabled = [Bool](repeating: false, count: 4) // per-lane portamento between consecutive notes
+    private var lastNote = [Int?](repeating: nil, count: 4)
+    private struct Glide { var from: Int; var to: Int; var t: Double; let dur: Double; let voice: ChipVoice }
+    private var glides: [Int: Glide] = [:] // lane → active pitch slide
+
     // Sequencer
     let stepCount = 16
     private(set) var lanes: [Lane]
-    var bpm = 120
+    var bpm = 120 { didSet { updateDelayTime() } }
     var stepsPerBeat = 4 // 16th notes
     private(set) var currentStep = -1
     private(set) var isPlaying = false
@@ -118,6 +131,54 @@ final class ChiptuneEngine {
                  steps: [Bool](repeating: false, count: 16),
                  rootNote: voice == .pulse2 ? 36 : (voice == .noise ? 48 : 60),
                  volume: 0.85)
+        }
+        // FX defaults = effect-off: filter fully open, everything else dry.
+        eq.bands[0].filterType = .resonantLowPass
+        eq.bands[0].frequency = 20000
+        eq.bands[0].gain = 0
+        eq.bands[0].bypass = false
+        dist.loadFactoryPreset(.multiDecimated1)
+        dist.preGain = -6
+        dist.wetDryMix = 0
+        delayFX.delayTime = 0.25
+        delayFX.feedback = 0
+        delayFX.wetDryMix = 0
+        delayFX.lowPassCutoff = 14000
+        reverbFX.loadFactoryPreset(.mediumHall)
+        reverbFX.wetDryMix = 0
+    }
+
+    // MARK: - FX controls (0…1 knob values)
+
+    /// Low-pass cutoff: 0 = muffled, 1 = fully open. Log-mapped 200 Hz … 20 kHz.
+    func setCutoff(_ v: Double) {
+        let t = max(0, min(1, v))
+        eq.bands[0].frequency = Float(200.0 * pow(20000.0 / 200.0, t))
+    }
+    /// Filter resonance peak at the cutoff (0…18 dB).
+    func setResonance(_ v: Double) { eq.bands[0].gain = Float(max(0, min(1, v)) * 18) }
+    /// Drive / bit-crush amount.
+    func setDrive(_ v: Double) {
+        let m = max(0, min(1, v))
+        dist.wetDryMix = Float(m * 70)
+        dist.preGain = Float(-6 + m * 12)
+    }
+    /// Echo: ties mix and feedback to one knob.
+    func setDelayMix(_ v: Double) {
+        let m = max(0, min(1, v))
+        delayFX.wetDryMix = Float(m * 50)
+        delayFX.feedback = Float(m * 55)
+    }
+    /// Reverb mix (space).
+    func setReverbMix(_ v: Double) { reverbFX.wetDryMix = Float(max(0, min(1, v)) * 60) }
+
+    private func updateDelayTime() { delayFX.delayTime = 60.0 / Double(max(40, bpm)) / 2.0 } // 8th note
+
+    /// Randomise the loop (the Dice button). Noise lane a touch denser.
+    func randomize() {
+        for i in lanes.indices {
+            let density = (ChipVoice(rawValue: i) == .noise) ? 0.4 : 0.3
+            for s in lanes[i].steps.indices { lanes[i].steps[s] = Double.random(in: 0 ..< 1) < density }
         }
     }
 
@@ -140,14 +201,35 @@ final class ChiptuneEngine {
     func isMuted(lane: Int) -> Bool { lanes[lane].muted }
     func clear() { for i in lanes.indices { for s in lanes[i].steps.indices { lanes[i].steps[s] = false } } }
 
-    /// Audition a patch live (a pad tap / soundboard hit).
+    /// Audition a patch live (a soundboard hit).
     func audition(_ patch: ChiptunePatch, note: Int) { trigger(patch, note: note, volume: 0.9) }
 
-    /// Immediately silence every channel (kills any ringing notes). Power-cycling the chip
-    /// clears all channel state at once; we power it back on for future notes.
+    /// Bypass (or re-enable) the whole FX chain. The keyboard uses this to play dry;
+    /// the sequencer always re-enables it on `play()`.
+    private func setFXBypass(_ bypassed: Bool) {
+        eq.bypass = bypassed
+        dist.bypass = bypassed
+        delayFX.bypass = bypassed
+        reverbFX.bypass = bypassed
+    }
+
+    /// Play one keyboard note. When `throughFX` is false (and the loop isn't running) the
+    /// note is heard dry; otherwise it's coloured by the current Cutoff/Res/Drive/Delay/Reverb
+    /// knob settings.
+    func playKey(_ patch: ChiptunePatch, note: Int, throughFX: Bool) {
+        startAudioIfNeeded()
+        if !isPlaying { setFXBypass(!throughFX) }
+        trigger(patch, note: note, volume: 0.9)
+    }
+
+    /// Immediately silence everything: power-cycle the chip (clears all channel state) and
+    /// flush the delay/reverb tails so nothing keeps ringing after Clear/Stop.
     func panic() {
         apu.write(0xFF26, 0x00)
         powerOn()
+        glides.removeAll()
+        delayFX.reset()
+        reverbFX.reset()
     }
 
     // MARK: Transport
@@ -156,6 +238,7 @@ final class ChiptuneEngine {
 
     func play() {
         startAudioIfNeeded()
+        setFXBypass(false)   // the loop always honours the FX knobs
         isPlaying = true
         currentStep = -1
         stepAccum = 0
@@ -185,8 +268,14 @@ final class ChiptuneEngine {
                 ring.readDeinterleaved(left: l, right: r, frames: Int(frames))
                 return noErr
             }
-            engine.attach(src)
-            engine.connect(src, to: engine.mainMixerNode, format: fmt)
+            // src → filter → drive → delay → reverb → mixer
+            for u in [src, eq, dist, delayFX, reverbFX] as [AVAudioNode] { engine.attach(u) }
+            engine.connect(src, to: eq, format: fmt)
+            engine.connect(eq, to: dist, format: fmt)
+            engine.connect(dist, to: delayFX, format: fmt)
+            engine.connect(delayFX, to: reverbFX, format: fmt)
+            engine.connect(reverbFX, to: engine.mainMixerNode, format: fmt)
+            updateDelayTime()
             try? engine.start()
             audio = engine
         }
@@ -221,6 +310,7 @@ final class ChiptuneEngine {
         var guardCount = 0
         while apu.ring.fill < target && guardCount < 64 {
             if isPlaying { advanceSequencer(by: chunkSeconds) }
+            if !glides.isEmpty { advanceGlides(by: chunkSeconds) }
             apu.step(chunkCycles)
             apu.flush()
             guardCount += 1
@@ -228,19 +318,38 @@ final class ChiptuneEngine {
     }
 
     private func advanceSequencer(by seconds: Double) {
-        let stepDur = 60.0 / Double(bpm) / Double(stepsPerBeat)
+        let base = 60.0 / Double(bpm) / Double(stepsPerBeat)
+        let sw = max(0, min(0.6, swing))
         stepAccum += seconds
-        while stepAccum >= stepDur {
-            stepAccum -= stepDur
-            currentStep = (currentStep + 1) % stepCount
+        while true {
+            let next = (currentStep + 1) % stepCount
+            // Swing: the off-beat (odd) steps land late, the on-beats early; a pair still
+            // sums to 2× the base step, so tempo holds.
+            let threshold = base * (next % 2 == 1 ? (1 + sw) : (1 - sw))
+            if stepAccum < threshold { break }
+            stepAccum -= threshold
+            currentStep = next
             fireStep(currentStep)
             onStep?(currentStep)
         }
     }
 
+    /// Advance any active pitch slides (Glide), writing the channel frequency without
+    /// retriggering so the note bends from the previous pitch to the new one.
+    private func advanceGlides(by dt: Double) {
+        for (lane, g0) in glides {
+            var g = g0
+            g.t += dt
+            let f = min(1, g.t / g.dur)
+            let cur = Int((Double(g.from) + (Double(g.to) - Double(g.from)) * f).rounded())
+            writeFreq(g.voice, cur, trigger: false)
+            if f >= 1 { glides[lane] = nil } else { glides[lane] = g }
+        }
+    }
+
     private func fireStep(_ i: Int) {
-        for lane in lanes where !lane.muted && lane.steps[i] {
-            trigger(lane.patch, note: lane.rootNote, volume: lane.volume)
+        for (lane, l) in lanes.enumerated() where !l.muted && l.steps[i] {
+            trigger(l.patch, note: l.rootNote, volume: l.volume, lane: lane)
         }
     }
 
@@ -261,29 +370,46 @@ final class ChiptuneEngine {
     private var pulseLen: UInt8 { UInt8(64 - gateTicks) }                 // NR11/NR21/NR41 length field
     private var waveLen: UInt8 { UInt8(256 - max(1, min(255, Int(gateMs / 1000 * 256)))) } // NR31
 
-    private func trigger(_ patch: ChiptunePatch, note: Int, volume: Double) {
+    /// Write a pitched channel's frequency; `trigger` also (re)starts the note.
+    private func writeFreq(_ voice: ChipVoice, _ p: Int, trigger: Bool) {
+        let lo = UInt8(p & 0xFF)
+        let hi = UInt8((trigger ? 0x80 : 0) | 0x40 | ((p >> 8) & 7)) // [trigger] + length-enable
+        switch voice {
+        case .pulse1: apu.write(0xFF13, lo); apu.write(0xFF14, hi)
+        case .pulse2: apu.write(0xFF18, lo); apu.write(0xFF19, hi)
+        case .wave:   apu.write(0xFF1D, lo); apu.write(0xFF1E, hi)
+        case .noise:  break
+        }
+    }
+
+    private func trigger(_ patch: ChiptunePatch, note: Int, volume: Double, lane: Int? = nil) {
         let env = max(0, min(15, Int((Double(patch.envInit) * volume).rounded())))
-        let p = ChipNote.period(hz: ChipNote.hz(note))
+        let target = ChipNote.period(hz: ChipNote.hz(note))
+
+        // Glide: if enabled and this lane had a previous pitched note, start at the old
+        // pitch and slide to the new one.
+        var startP = target, glideTo: Int? = nil
+        if let lane, glideEnabled[lane], patch.voice != .noise, let prev = lastNote[lane], prev != note {
+            startP = ChipNote.period(hz: ChipNote.hz(prev))
+            glideTo = target
+        }
+
         switch patch.voice {
         case .pulse1:
             apu.write(0xFF11, UInt8((patch.duty & 3) << 6) | pulseLen)
             apu.write(0xFF12, UInt8(env << 4 | (patch.envDir ? 8 : 0) | patch.envPeriod))
-            apu.write(0xFF13, UInt8(p & 0xFF))
-            apu.write(0xFF14, UInt8(0x80 | 0x40 | ((p >> 8) & 7))) // trigger + length-enable
+            writeFreq(.pulse1, startP, trigger: true)
         case .pulse2:
             apu.write(0xFF16, UInt8((patch.duty & 3) << 6) | pulseLen)
             apu.write(0xFF17, UInt8(env << 4 | (patch.envDir ? 8 : 0) | patch.envPeriod))
-            apu.write(0xFF18, UInt8(p & 0xFF))
-            apu.write(0xFF19, UInt8(0x80 | 0x40 | ((p >> 8) & 7)))
+            writeFreq(.pulse2, startP, trigger: true)
         case .wave:
             apu.write(0xFF1A, 0x80) // DAC on
             for i in 0 ..< 16 { apu.write(UInt16(0xFF30 + i), patch.waveRAM[i]) }
-            // Wave volume: map the lane volume onto the 100/50/25% codes.
             let code = volume > 0.66 ? 1 : (volume > 0.33 ? 2 : (volume > 0.05 ? 3 : 0))
             apu.write(0xFF1C, UInt8((patch.waveVol == 0 ? 0 : code) << 5))
             apu.write(0xFF1B, waveLen)
-            apu.write(0xFF1D, UInt8(p & 0xFF))
-            apu.write(0xFF1E, UInt8(0x80 | 0x40 | ((p >> 8) & 7)))
+            writeFreq(.wave, startP, trigger: true)
         case .noise:
             apu.write(0xFF20, pulseLen) // NR41 length
             apu.write(0xFF21, UInt8(env << 4 | (patch.envDir ? 8 : 0) | patch.envPeriod))
@@ -292,6 +418,11 @@ final class ChiptuneEngine {
             let shift = max(0, min(13, baseShift + (note - 48) / 4))
             apu.write(0xFF22, UInt8(shift << 4) | (patch.noiseReg & 0x0F))
             apu.write(0xFF23, UInt8(0x80 | 0x40))
+        }
+
+        if let lane {
+            if patch.voice != .noise { lastNote[lane] = note }
+            glides[lane] = glideTo.map { Glide(from: startP, to: $0, t: 0, dur: 0.08, voice: patch.voice) }
         }
     }
 }

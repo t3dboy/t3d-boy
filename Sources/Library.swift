@@ -497,7 +497,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let folderBarLabel = NSTextField(labelWithString: "")
     private let folderBarButton = CapsuleButton(
         title: "Change", style: .neutral, fontSize: 11, height: 24)
-    private let playButton = CapsuleButton(title: "▶  Play", style: .prominent)
+    private let playButton = CapsuleButton(title: "▶  Play Game", style: .prominent)
     private let emptyLabel = NSTextField(labelWithString: "")
     // Warm background behind the ROM list (skinned themes only)
     private let listPanel = NSView()
@@ -526,7 +526,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let chiptunesDrawer = ChiptunesDrawer()
     private var chiptunesOpen = false
     private var chiptunesHeightConstraint: NSLayoutConstraint!
-    private let chiptunesBaseHeight: CGFloat = 300
+    private let chiptunesBaseHeight: CGFloat = 372
     private let chiptunesBonusHeight: CGFloat = 60 // extra room when the achievements drawer is open
     private var barHeight: CGFloat { ChiptunesDrawer.barHeight } // the always-visible launcher bar
     /// Drawer height when closed (just the bar) and open (bar + instrument).
@@ -556,7 +556,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         // the library's own space unchanged.
         let bar = ChiptunesDrawer.barHeight
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 880, height: (engineer ? 740 : 600) + bar),
+            contentRect: NSRect(x: 0, y: 0, width: 940, height: (engineer ? 740 : 600) + bar),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered, defer: false)
         window.title = "T3d Boy — ROM Library"
@@ -1551,7 +1551,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         // force the intended size on first appearance, then leave it to the user.
         if !hasSizedOnce, let window {
             hasSizedOnce = true
-            let target = NSSize(width: 880, height: (isEngineer ? 740 : 600) + chiptunesClosedHeight)
+            let target = NSSize(width: 940, height: (isEngineer ? 740 : 600) + chiptunesClosedHeight)
             window.setContentSize(target)
             window.center()
             DispatchQueue.main.async { [weak window] in

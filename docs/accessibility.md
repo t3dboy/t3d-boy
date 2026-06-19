@@ -107,9 +107,13 @@ sound still plays.
 ## T3d Tunes
 
 The **T3d Tunes** bar that opens the instrument is a standard keyboard- and VoiceOver-
-accessible button. The looper grid itself — the step cells, rotary knobs and pads — is
-currently a **mouse/pointer-oriented** surface and isn't yet exposed to VoiceOver or full
-keyboard navigation; making the sequencer playable without a pointer is a planned follow-up.
+accessible button, as are the sound dropdowns and the **Use FX** and per-lane **Glide**
+switches (each carries a VoiceOver label). The **keyboard** can be played without a pointer:
+its keys are mapped to the computer keyboard (`Q`–`P`, then `A`–`L`, then `Z`–`N`) whenever
+the drawer is open and you're not editing a text field. The step grid and the rotary knobs
+are still a **mouse/pointer-oriented** surface that isn't yet exposed to VoiceOver or
+focus-based keyboard navigation; making the whole sequencer playable without a pointer is a
+planned follow-up.
 
 ---
 
