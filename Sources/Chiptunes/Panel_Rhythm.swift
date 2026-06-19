@@ -23,7 +23,7 @@ final class RhythmPanel: NSView {
 
     private func caption(_ t: String) -> NSTextField {
         let c = NSTextField(labelWithString: theme.cased(t))
-        c.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        c.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
         c.textColor = theme.textMuted
         c.alignment = .center
         c.setAccessibilityElement(false)
@@ -38,7 +38,7 @@ final class RhythmPanel: NSView {
         let hLen = caption("Len"), hDir = caption("Dir"), hProb = caption("Prob"), hEuclid = caption("Euclid")
 
         // Mutate — evolve the whole pattern (top-right).
-        let mutate = CapsuleButton(title: "Mutate", style: .neutral, fontSize: 11, height: 24)
+        let mutate = CapsuleButton(title: "Mutate", style: .neutral, fontSize: 13, height: 30)
         mutate.translatesAutoresizingMaskIntoConstraints = false
         mutate.onClick = { [weak self] in
             guard let self else { return }
@@ -59,55 +59,62 @@ final class RhythmPanel: NSView {
         }
 
         // --- Column x-anchors (shared by header captions + each row) ---
-        // Layout (left→right): [tag 70] [Len 56] [Dir 110] [Prob 44] [Euclid ~120]
-        let inset: CGFloat = 10
+        // Layout (left→right): [tag] [Len] [Dir] [Prob] [Euclid]
+        // Generous, consistent insets so the panel breathes in the taller (210pt) host.
+        let inset: CGFloat = 16
 
         NSLayoutConstraint.activate([
             mutate.topAnchor.constraint(equalTo: topAnchor, constant: inset),
             mutate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            mutate.widthAnchor.constraint(equalToConstant: 78),
+            mutate.widthAnchor.constraint(equalToConstant: 120),
         ])
 
-        // Header captions sit on a single row above lane 0.
+        // Header captions sit on a single row above lane 0 (gap ~6pt above row 1).
         let firstRow = rows[0]
         NSLayoutConstraint.activate([
-            hLen.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -1),
+            hLen.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
             hLen.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW / 2),
 
-            hDir.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -1),
+            hDir.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
             hDir.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW / 2),
 
-            hProb.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -1),
+            hProb.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
             hProb.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW + Col.probW / 2),
 
-            hEuclid.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -1),
+            hEuclid.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
             hEuclid.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW + Col.probW + Col.euclidW / 2),
         ])
 
-        // Stack the rows (header leaves ~12pt at top).
+        // Stack the rows. Height budget (210pt host):
+        //   first row top 30 + 4·rowH(40) + 3·gap(5) = 30 + 160 + 15 = 205 → ~5pt bottom margin.
+        //   The header captions live in the 30 - 6 = 24 band, clear of the 16pt top inset.
+        let rowGap: CGFloat = 5
         var prev: NSView? = nil
         for row in rows {
             NSLayoutConstraint.activate([
                 row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
+                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
                 row.heightAnchor.constraint(equalToConstant: Col.rowH),
             ])
             if let p = prev {
-                row.topAnchor.constraint(equalTo: p.bottomAnchor, constant: 2).isActive = true
+                row.topAnchor.constraint(equalTo: p.bottomAnchor, constant: rowGap).isActive = true
             } else {
-                row.topAnchor.constraint(equalTo: topAnchor, constant: 14).isActive = true
+                // inset(16) + header caption(~8) + gap(6) ≈ 30pt down for the first lane.
+                row.topAnchor.constraint(equalTo: topAnchor, constant: 30).isActive = true
             }
             prev = row
         }
     }
 
-    // Fixed column widths (so headers line up over every row).
+    // Fixed column widths (so headers line up over every row). Wider columns give the
+    // controls room to breathe and keep the lanes vertically aligned.
     private enum Col {
-        static let tagW: CGFloat = 64
-        static let lenW: CGFloat = 56
-        static let dirW: CGFloat = 110
-        static let probW: CGFloat = 44
-        static let euclidW: CGFloat = 130
-        static let rowH: CGFloat = 24
+        static let tagW: CGFloat = 72
+        static let lenW: CGFloat = 72
+        static let dirW: CGFloat = 150
+        static let probW: CGFloat = 56
+        static let euclidW: CGFloat = 200
+        static let rowH: CGFloat = 40
     }
 
     // MARK: - One lane row
@@ -216,6 +223,8 @@ final class RhythmPanel: NSView {
         }
 
         // --- Column layout inside the row ---
+        // Controls centre vertically in the ~40pt lane; columns line up with the headers.
+        // Intra-control gap ~18pt between the column groups; tighter pairs within a column.
         let cy = row.centerYAnchor
         NSLayoutConstraint.activate([
             // tag: dot + label
@@ -229,28 +238,28 @@ final class RhythmPanel: NSView {
             // Len column: readout + stepper
             lenReadout.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Col.tagW),
             lenReadout.centerYAnchor.constraint(equalTo: cy),
-            lenReadout.widthAnchor.constraint(equalToConstant: 18),
-            lenStepper.leadingAnchor.constraint(equalTo: lenReadout.trailingAnchor, constant: 3),
+            lenReadout.widthAnchor.constraint(equalToConstant: 20),
+            lenStepper.leadingAnchor.constraint(equalTo: lenReadout.trailingAnchor, constant: 6),
             lenStepper.centerYAnchor.constraint(equalTo: cy),
 
-            // Dir column
+            // Dir column (wider segmented control)
             dirSeg.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Col.tagW + Col.lenW),
             dirSeg.centerYAnchor.constraint(equalTo: cy),
-            dirSeg.widthAnchor.constraint(equalToConstant: Col.dirW - 8),
+            dirSeg.widthAnchor.constraint(equalToConstant: Col.dirW - 18),
 
             // Prob column (knob is 40×40; center it in the column)
             probKnob.centerXAnchor.constraint(equalTo: row.leadingAnchor,
                                               constant: Col.tagW + Col.lenW + Col.dirW + Col.probW / 2),
             probKnob.centerYAnchor.constraint(equalTo: cy),
 
-            // Euclid column: readout + stepper + Fill
+            // Euclid column: readout + stepper + Fill (gap ~18pt before the Fill button)
             euclidReadout.leadingAnchor.constraint(equalTo: row.leadingAnchor,
                                                    constant: Col.tagW + Col.lenW + Col.dirW + Col.probW),
             euclidReadout.centerYAnchor.constraint(equalTo: cy),
-            euclidReadout.widthAnchor.constraint(equalToConstant: 18),
-            euclidStepper.leadingAnchor.constraint(equalTo: euclidReadout.trailingAnchor, constant: 3),
+            euclidReadout.widthAnchor.constraint(equalToConstant: 20),
+            euclidStepper.leadingAnchor.constraint(equalTo: euclidReadout.trailingAnchor, constant: 6),
             euclidStepper.centerYAnchor.constraint(equalTo: cy),
-            fill.leadingAnchor.constraint(equalTo: euclidStepper.trailingAnchor, constant: 6),
+            fill.leadingAnchor.constraint(equalTo: euclidStepper.trailingAnchor, constant: 18),
             fill.centerYAnchor.constraint(equalTo: cy),
             fill.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
 

@@ -12,8 +12,8 @@ final class PerformancePanel: NSView {
     private let onChange: () -> Void
 
     // Scenes
-    private let storeA = CapsuleButton(title: "Store A", style: .neutral, fontSize: 11, height: 24)
-    private let storeB = CapsuleButton(title: "Store B", style: .neutral, fontSize: 11, height: 24)
+    private let storeA = CapsuleButton(title: "Store A", style: .neutral, fontSize: 13, height: 30)
+    private let storeB = CapsuleButton(title: "Store B", style: .neutral, fontSize: 13, height: 30)
 
     // Tap tempo
     private var tapTimes: [Double] = []
@@ -38,28 +38,39 @@ final class PerformancePanel: NSView {
     // MARK: - Build
 
     private func build() {
-        let groups = NSStackView(views: [
+        // Top row: live scene/morph + tap-tempo controls.
+        let topRow = NSStackView(views: [
             scenesGroup(),
             divider(),
             tempoGroup(),
-            divider(),
+        ])
+        topRow.orientation = .horizontal
+        topRow.alignment = .top
+        topRow.spacing = 30
+
+        // Bottom row: a relaxed grid of stutter, pump and per-lane solo controls.
+        let bottomRow = NSStackView(views: [
             stutterGroup(),
             divider(),
             pumpGroup(),
             divider(),
             soloGroup(),
         ])
-        groups.orientation = .horizontal
-        groups.alignment = .centerY
-        groups.spacing = 14
-        groups.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(groups)
+        bottomRow.orientation = .horizontal
+        bottomRow.alignment = .top
+        bottomRow.spacing = 30
+
+        let rows = NSStackView(views: [topRow, bottomRow])
+        rows.orientation = .vertical
+        rows.alignment = .leading
+        rows.spacing = 20
+        rows.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rows)
         NSLayoutConstraint.activate([
-            groups.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            groups.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            groups.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            groups.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
-            groups.centerYAnchor.constraint(equalTo: centerYAnchor),
+            rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            rows.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            rows.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            rows.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16),
         ])
         refreshSceneTints()
         updateBpmReadout()
@@ -85,32 +96,38 @@ final class PerformancePanel: NSView {
         morph.setAccessibilityLabel("Morph")
         morph.onChange = { [weak self] v in self?.engine.morph(v); self?.onChange() }
 
+        // Stacked store/recall buttons at a comfortable size.
+        storeA.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
+        storeB.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
+
         let stores = NSStackView(views: [storeA, storeB])
-        stores.orientation = .vertical; stores.alignment = .leading; stores.spacing = 4
+        stores.orientation = .vertical; stores.alignment = .leading; stores.spacing = 8
         let recalls = NSStackView(views: [recallA, recallB])
-        recalls.orientation = .vertical; recalls.spacing = 4
+        recalls.orientation = .vertical; recalls.spacing = 8
 
         let row = NSStackView(views: [stores, recalls, labeled(morph, "Morph")])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
         return captioned(row, "Scenes")
     }
 
     private func tempoGroup() -> NSView {
-        let tap = CapsuleButton(title: "Tap", style: .neutral, fontSize: 12, height: 30)
+        let tap = CapsuleButton(title: "Tap", style: .neutral, fontSize: 13, height: 30)
+        tap.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
         tap.onClick = { [weak self] in self?.registerTap() }
 
-        bpmReadout.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        bpmReadout.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
         bpmReadout.textColor = theme.textSecondary
         bpmReadout.alignment = .center
         bpmReadout.setAccessibilityElement(false)
 
         let col = NSStackView(views: [tap, bpmReadout])
-        col.orientation = .vertical; col.alignment = .centerX; col.spacing = 3
+        col.orientation = .vertical; col.alignment = .centerX; col.spacing = 6
         return captioned(col, "Tempo")
     }
 
     private func stutterGroup() -> NSView {
         let pad = HoldPad(title: "Stutter")
+        pad.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
         pad.onStart = { [weak self] in self?.startStutter() }
         pad.onStop = { [weak self] in self?.stopStutter() }
 
@@ -136,7 +153,7 @@ final class PerformancePanel: NSView {
         rate.orientation = .vertical; rate.alignment = .centerX; rate.spacing = 1
 
         let row = NSStackView(views: [pad, rate])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 6
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 12
         return captioned(row, "Stutter")
     }
     private weak var stutterRateLabel: NSTextField?
@@ -174,7 +191,7 @@ final class PerformancePanel: NSView {
         div.orientation = .vertical; div.alignment = .centerX; div.spacing = 1
 
         let row = NSStackView(views: [labeled(depth, "Depth"), div])
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 6
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
         return captioned(row, "Pump")
     }
     private var stepperBridge: StepperBridge?
@@ -190,7 +207,7 @@ final class PerformancePanel: NSView {
             cells.append(labeled(toggle, voice.short, tint: voiceColor(voice)))
         }
         let row = NSStackView(views: cells)
-        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 8
+        row.orientation = .horizontal; row.alignment = .centerY; row.spacing = 16
         return captioned(row, "Solo")
     }
 
@@ -274,18 +291,18 @@ final class PerformancePanel: NSView {
         cap.alignment = .center
         cap.setAccessibilityElement(false)
         let v = NSStackView(views: [control, cap])
-        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 2
+        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 4
         return v
     }
 
-    /// A group of controls under a small section caption.
+    /// A group of controls beneath a small section caption (caption heads the group).
     private func captioned(_ body: NSView, _ title: String) -> NSView {
         let cap = NSTextField(labelWithString: theme.cased(title))
         cap.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
         cap.textColor = theme.textMuted
         cap.setAccessibilityElement(false)
-        let v = NSStackView(views: [body, cap])
-        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 3
+        let v = NSStackView(views: [cap, body])
+        v.orientation = .vertical; v.alignment = .leading; v.spacing = 4
         return v
     }
 
@@ -295,7 +312,7 @@ final class PerformancePanel: NSView {
         v.layer?.backgroundColor = theme.lineHair.cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
         v.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        v.heightAnchor.constraint(equalToConstant: 80).isActive = true
+        v.heightAnchor.constraint(equalToConstant: 52).isActive = true
         v.setAccessibilityElement(false)
         return v
     }

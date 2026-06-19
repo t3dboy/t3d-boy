@@ -627,10 +627,10 @@ final class ChiptunesDrawer: NSView {
             tabs.topAnchor.constraint(equalTo: keyboard.bottomAnchor, constant: 12),
             tabs.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
 
-            host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 8),
+            host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 10),
             host.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
             host.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
-            host.heightAnchor.constraint(equalToConstant: 124),
+            host.heightAnchor.constraint(equalToConstant: 210),
 
             status.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 8),
             status.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),

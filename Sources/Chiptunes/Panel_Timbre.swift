@@ -13,13 +13,14 @@ final class TimbrePanel: NSView {
     private let onChange: () -> Void
 
     // Column x-positions (leading edge), tuned to fit ~900pt wide within the host's insets.
+    // Spacing between a row's controls is ~18pt; columns align across all four lanes.
     private let xLabel: CGFloat = 0
-    private let xArpToggle: CGFloat = 60
-    private let xArpShape: CGFloat = 100
-    private let xArpRate: CGFloat = 188
-    private let xPWM: CGFloat = 250
-    private let xVib: CGFloat = 330
-    private let xRatchet: CGFloat = 412
+    private let xArpToggle: CGFloat = 72
+    private let xArpShape: CGFloat = 116
+    private let xArpRate: CGFloat = 218
+    private let xPWM: CGFloat = 296
+    private let xVib: CGFloat = 388
+    private let xRatchet: CGFloat = 480
 
     init(engine: ChiptuneEngine, onChange: @escaping () -> Void) {
         self.engine = engine
@@ -49,20 +50,21 @@ final class TimbrePanel: NSView {
         let rows = NSStackView()
         rows.orientation = .vertical
         rows.alignment = .leading
-        rows.spacing = 4
+        rows.spacing = 6
         rows.translatesAutoresizingMaskIntoConstraints = false
         for i in 0 ..< 4 { rows.addArrangedSubview(laneRow(lane: i)) }
         addSubview(rows)
 
+        // Height budget (≤210): top 16 + header 12 + gap 6 + 4×38 + 3×6 = 204.
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: topAnchor, constant: 2),
-            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
-            header.heightAnchor.constraint(equalToConstant: 10),
+            header.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            header.heightAnchor.constraint(equalToConstant: 12),
 
-            rows.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 2),
-            rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            rows.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
+            rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
         ])
     }
 
@@ -201,7 +203,7 @@ final class TimbrePanel: NSView {
             row.addSubview(v)
         }
         NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: 26),
+            row.heightAnchor.constraint(equalToConstant: 38),
 
             dot.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xLabel),
             dot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
@@ -215,11 +217,11 @@ final class TimbrePanel: NSView {
 
             shapeMenu.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xArpShape),
             shapeMenu.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            shapeMenu.widthAnchor.constraint(equalToConstant: 72),
+            shapeMenu.widthAnchor.constraint(equalToConstant: 84),
 
             rateStepper.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xArpRate),
             rateStepper.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            rateReadout.leadingAnchor.constraint(equalTo: rateStepper.trailingAnchor, constant: 3),
+            rateReadout.leadingAnchor.constraint(equalTo: rateStepper.trailingAnchor, constant: 5),
             rateReadout.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             rateReadout.widthAnchor.constraint(equalToConstant: 14),
 
@@ -231,7 +233,7 @@ final class TimbrePanel: NSView {
 
             ratchetStepper.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xRatchet),
             ratchetStepper.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            ratchetReadout.leadingAnchor.constraint(equalTo: ratchetStepper.trailingAnchor, constant: 3),
+            ratchetReadout.leadingAnchor.constraint(equalTo: ratchetStepper.trailingAnchor, constant: 5),
             ratchetReadout.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             ratchetReadout.widthAnchor.constraint(equalToConstant: 14),
             ratchetStepper.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
@@ -239,8 +241,9 @@ final class TimbrePanel: NSView {
         return row
     }
 
-    // A 20pt ChipKnob shrunk into a compact cell would overflow the row; ChipKnob is a
-    // fixed 40×40, so wrap it so its centre aligns and it doesn't stretch the 26pt row.
+    // ChipKnob is a fixed 40×40; centre it in a 40pt-wide cell so neighbouring columns
+    // get breathing room and the knob's centre aligns to its column x-position. The cell's
+    // height is left free so the knob can use the full ~38pt row without stretching it.
     private func wrapKnob(_ knob: ChipKnob) -> NSView {
         let cell = NSView()
         cell.translatesAutoresizingMaskIntoConstraints = false
@@ -248,7 +251,7 @@ final class TimbrePanel: NSView {
         cell.addSubview(knob)
         NSLayoutConstraint.activate([
             cell.widthAnchor.constraint(equalToConstant: 40),
-            cell.heightAnchor.constraint(equalToConstant: 24),
+            cell.heightAnchor.constraint(equalToConstant: 36),
             knob.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
             knob.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
         ])

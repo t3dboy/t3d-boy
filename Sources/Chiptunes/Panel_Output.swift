@@ -202,7 +202,7 @@ final class OutputPanel: NSView {
 
     private let scope: ScopeView
     private let editor: WavetableEditor
-    private let exportButton = CapsuleButton(title: "Export WAV…", style: .neutral, fontSize: 12, height: 28)
+    private let exportButton = CapsuleButton(title: "Export WAV…", style: .neutral, fontSize: 13, height: 30)
 
     // Export state.
     private var exporting = false
@@ -233,9 +233,9 @@ final class OutputPanel: NSView {
         // --- Wavetable editor + presets ---
         editor.setAccessibilityLabel("Wave channel wavetable. Drag to draw the waveform")
 
-        let sineBtn = CapsuleButton(title: "Sine", style: .neutral, fontSize: 10, height: 20)
-        let sawBtn = CapsuleButton(title: "Saw", style: .neutral, fontSize: 10, height: 20)
-        let sqrBtn = CapsuleButton(title: "Square", style: .neutral, fontSize: 10, height: 20)
+        let sineBtn = CapsuleButton(title: "Sine", style: .neutral, fontSize: 11, height: 24)
+        let sawBtn = CapsuleButton(title: "Saw", style: .neutral, fontSize: 11, height: 24)
+        let sqrBtn = CapsuleButton(title: "Square", style: .neutral, fontSize: 11, height: 24)
         sineBtn.onClick = { [weak self] in self?.editor.loadSine() }
         sawBtn.onClick = { [weak self] in self?.editor.loadSaw() }
         sqrBtn.onClick = { [weak self] in self?.editor.loadSquare() }
@@ -243,7 +243,7 @@ final class OutputPanel: NSView {
         presets.orientation = .horizontal
         presets.alignment = .centerY
         presets.distribution = .fillEqually
-        presets.spacing = 4
+        presets.spacing = 8
         presets.translatesAutoresizingMaskIntoConstraints = false
 
         // --- Export ---
@@ -255,34 +255,36 @@ final class OutputPanel: NSView {
         }
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 124),
+            heightAnchor.constraint(equalToConstant: 210),
 
-            // Scope section (left).
-            scopeCap.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            scopeCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            scope.topAnchor.constraint(equalTo: scopeCap.bottomAnchor, constant: 4),
-            scope.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            scope.widthAnchor.constraint(equalToConstant: 320),
-            scope.heightAnchor.constraint(equalToConstant: 96),
+            // Scope section (left). 16pt top/leading insets; caption above a 360×150 scope.
+            scopeCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            scopeCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            scope.topAnchor.constraint(equalTo: scopeCap.bottomAnchor, constant: 6),
+            scope.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            scope.widthAnchor.constraint(equalToConstant: 360),
+            scope.heightAnchor.constraint(equalToConstant: 150),
 
-            // Wavetable section (middle).
-            waveCap.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            waveCap.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 18),
-            editor.topAnchor.constraint(equalTo: waveCap.bottomAnchor, constant: 4),
-            editor.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 18),
-            editor.widthAnchor.constraint(equalToConstant: 260),
-            editor.heightAnchor.constraint(equalToConstant: 70),
-            presets.topAnchor.constraint(equalTo: editor.bottomAnchor, constant: 4),
+            // Wavetable section (middle). ~30pt gap after the scope; 300×150 editor + presets.
+            waveCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            waveCap.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 30),
+            editor.topAnchor.constraint(equalTo: waveCap.bottomAnchor, constant: 6),
+            editor.leadingAnchor.constraint(equalTo: scope.trailingAnchor, constant: 30),
+            editor.widthAnchor.constraint(equalToConstant: 300),
+            editor.heightAnchor.constraint(equalToConstant: 150),
+            presets.topAnchor.constraint(equalTo: editor.bottomAnchor, constant: 6),
             presets.leadingAnchor.constraint(equalTo: editor.leadingAnchor),
             presets.trailingAnchor.constraint(equalTo: editor.trailingAnchor),
-            presets.heightAnchor.constraint(equalToConstant: 20),
+            presets.heightAnchor.constraint(equalToConstant: 24),
 
-            // Export section (right).
-            exportCap.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            exportCap.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 18),
-            exportButton.centerYAnchor.constraint(equalTo: scope.centerYAnchor),
-            exportButton.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 18),
+            // Export section (right). ~30pt gap after the editor; caption above the button.
+            exportCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            exportCap.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 30),
+            exportButton.topAnchor.constraint(equalTo: exportCap.bottomAnchor, constant: 6),
+            exportButton.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 30),
+            exportButton.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
             exportButton.widthAnchor.constraint(equalToConstant: 140),
+            exportButton.heightAnchor.constraint(equalToConstant: 30),
         ])
     }
 

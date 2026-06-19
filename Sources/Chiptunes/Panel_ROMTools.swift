@@ -35,12 +35,13 @@ final class ROMToolsPanel: NSView {
 
     private func build() {
         // --- 1. Auto-compose ---
-        let composeBtn = CapsuleButton(title: "Auto-compose", style: .prominent, fontSize: 12, height: 30)
+        let composeBtn = CapsuleButton(title: "Auto-compose", style: .prominent, fontSize: 13, height: 32)
         composeBtn.onClick = { [weak self] in
             guard let self else { return }
             self.engine.autoCompose() // fires the grid redraw itself…
             self.onChange()           // …but keep the host in sync too.
         }
+        composeBtn.widthAnchor.constraint(greaterThanOrEqualToConstant: 130).isActive = true
         let composeSection = section(
             caption: "Auto-compose",
             sub: "Builds a loop from this cartridge's sounds",
@@ -59,24 +60,27 @@ final class ROMToolsPanel: NSView {
         let shuffleControls = NSStackView(views: toggleRow)
         shuffleControls.orientation = .horizontal
         shuffleControls.alignment = .bottom
-        shuffleControls.spacing = 8
+        shuffleControls.spacing = 16
         let shuffleSection = section(
             caption: "Shuffle sounds",
             sub: "Each hit picks a random palette sound",
             content: shuffleControls)
 
         // --- 3. Two-ROM mashup ---
-        let addBtn = CapsuleButton(title: "Add ROM…", style: .neutral, fontSize: 12, height: 30)
+        let addBtn = CapsuleButton(title: "Add ROM…", style: .neutral, fontSize: 13, height: 32)
         addBtn.onClick = { [weak self] in self?.pickMashupROM() }
+        addBtn.widthAnchor.constraint(greaterThanOrEqualToConstant: 130).isActive = true
         mashButton = addBtn
-        mashStatus.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        mashStatus.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
         mashStatus.textColor = theme.textMuted
-        mashStatus.lineBreakMode = .byTruncatingTail
+        mashStatus.lineBreakMode = .byWordWrapping
+        mashStatus.maximumNumberOfLines = 2
         mashStatus.setAccessibilityElement(false)
+        mashStatus.widthAnchor.constraint(greaterThanOrEqualToConstant: 200).isActive = true
         let mashStack = NSStackView(views: [addBtn, mashStatus])
         mashStack.orientation = .vertical
         mashStack.alignment = .leading
-        mashStack.spacing = 4
+        mashStack.spacing = 8
         let mashSection = section(
             caption: "Mashup — blend a 2nd game's sounds",
             sub: nil,
@@ -85,15 +89,16 @@ final class ROMToolsPanel: NSView {
         // --- Lay out the three sections with dividers between them ---
         let columns = NSStackView(views: [composeSection, divider(), shuffleSection, divider(), mashSection])
         columns.orientation = .horizontal
-        columns.alignment = .top
-        columns.spacing = 16
+        columns.alignment = .centerY
+        columns.spacing = 30
         columns.translatesAutoresizingMaskIntoConstraints = false
         addSubview(columns)
         NSLayoutConstraint.activate([
-            columns.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            columns.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
-            columns.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
-            columns.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -10),
+            columns.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 16),
+            columns.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            columns.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            columns.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16),
+            columns.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
     }
 
@@ -101,23 +106,29 @@ final class ROMToolsPanel: NSView {
 
     /// A captioned column: tiny mono caption, optional sub-caption, then the content view.
     private func section(caption title: String, sub: String?, content: NSView) -> NSView {
-        var views: [NSView] = [caption(title), content]
+        let head = caption(title)
+        var views: [NSView] = [head, content]
         if let sub {
             views.append(caption(sub, faint: true))
         }
         let stack = NSStackView(views: views)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 6
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         return stack
     }
 
-    /// The tiny synth-style caption used throughout the drawer (mono 8pt, muted).
+    /// The tiny synth-style caption used throughout the drawer (mono 9pt, muted).
+    /// Wraps to two lines so headings/subtext are never truncated.
     private func caption(_ t: String, faint: Bool = false) -> NSTextField {
-        let label = NSTextField(labelWithString: theme.cased(t))
-        label.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        let label = NSTextField(wrappingLabelWithString: theme.cased(t))
+        label.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
         label.textColor = faint ? theme.textFaint : theme.textMuted
+        label.isSelectable = false
+        label.maximumNumberOfLines = 2
+        label.setContentCompressionResistancePriority(.required, for: .horizontal)
+        label.widthAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
         label.setAccessibilityElement(false)
         return label
     }
@@ -143,7 +154,7 @@ final class ROMToolsPanel: NSView {
         v.layer?.backgroundColor = theme.lineHair.cgColor
         v.translatesAutoresizingMaskIntoConstraints = false
         v.widthAnchor.constraint(equalToConstant: 1).isActive = true
-        v.heightAnchor.constraint(equalToConstant: 80).isActive = true
+        v.heightAnchor.constraint(equalToConstant: 140).isActive = true
         return v
     }
 
