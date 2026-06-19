@@ -54,6 +54,12 @@ final class ChipStep: NSView {
 
 /// A single piano key. White and black keys differ only in colour/size (set by the host).
 final class ChipKey: NSView {
+    // Cached once and retained for the app's lifetime. Creating a system font on every
+    // draw (30+×/s while playing) can hand back an autoreleased font that's freed before
+    // CoreText finishes sizing it — an intermittent "nil object in ApplyFont" crash.
+    private static let octaveFont = NSFont.monospacedSystemFont(ofSize: 8, weight: .medium)
+    private static let typeFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold)
+
     let note: Int
     let isBlack: Bool
     var onDown: ((Int) -> Void)?
@@ -98,7 +104,7 @@ final class ChipKey: NSView {
         if !isBlack, note % 12 == 0 {
             let name = "C\(note / 12 - 1)"
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedSystemFont(ofSize: 8, weight: .medium),
+                .font: Self.octaveFont,
                 .foregroundColor: pressed ? theme.onAccent : NSColor(white: 0.45, alpha: 1),
             ]
             let s = NSAttributedString(string: name, attributes: attrs)
@@ -107,7 +113,7 @@ final class ChipKey: NSView {
         // Show the bound QWERTY key near the top of mapped keys.
         if let t = typeLabel {
             let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .semibold),
+                .font: Self.typeFont,
                 .foregroundColor: pressed ? theme.onAccent : NSColor(white: isBlack ? 0.72 : 0.40, alpha: 1),
             ]
             let s = NSAttributedString(string: t, attributes: attrs)
