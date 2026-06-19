@@ -318,14 +318,14 @@ final class ChiptunesBar: FocusableControl {
         let cx = bounds.maxX - 24, cy = bounds.midY
         let w: CGFloat = 5, h: CGFloat = 4
         let path = CGMutablePath()
-        if isExpanded { // ▾ close
-            path.move(to: CGPoint(x: cx - w, y: cy + h / 2))
-            path.addLine(to: CGPoint(x: cx, y: cy - h / 2))
-            path.addLine(to: CGPoint(x: cx + w, y: cy + h / 2))
-        } else {        // ▴ open
+        if isExpanded { // open → chevron points down (collapse)
             path.move(to: CGPoint(x: cx - w, y: cy - h / 2))
             path.addLine(to: CGPoint(x: cx, y: cy + h / 2))
             path.addLine(to: CGPoint(x: cx + w, y: cy - h / 2))
+        } else {        // closed → chevron points up (expand)
+            path.move(to: CGPoint(x: cx - w, y: cy + h / 2))
+            path.addLine(to: CGPoint(x: cx, y: cy - h / 2))
+            path.addLine(to: CGPoint(x: cx + w, y: cy + h / 2))
         }
         chevron.path = path
     }

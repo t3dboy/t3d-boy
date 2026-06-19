@@ -1462,6 +1462,11 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         chiptunesOpen = open
         chiptunesDrawer.setExpanded(open)
 
+        // The full-screen sequencer and the achievements drawer are mutually exclusive — the
+        // achievements panel would otherwise hang over the drawer's bar (and swallow the close
+        // chevron). Tuck it away when the sequencer takes over.
+        if open && drawerOpen { setDrawer(open: false, animated: false) }
+
         // Opening: fill the screen height and let the drawer overlay the library, leaving the
         // top (tabs + sort + ROM list) showing so you can still switch games. Closing: restore
         // the previous window frame and collapse the drawer back to its bar.
