@@ -10,6 +10,9 @@ import Cocoa
 
 // MARK: - Voice palette (themed)
 
+/// A top-down document view for the drawer's scroll view (NSView is bottom-up by default).
+final class FlippedView: NSView { override var isFlipped: Bool { true } }
+
 func voiceColor(_ v: ChipVoice) -> NSColor {
     switch v {
     case .pulse1: return theme.keyCoral
@@ -400,6 +403,7 @@ final class ChiptunesDrawer: NSView {
     // Advanced feature panels (built by their own files; the drawer just mounts them).
     private var featurePanels: [NSView] = []
     private var panelTabs: NSSegmentedControl?
+    private weak var contentScroll: NSScrollView?
     private var recArmedLane: Int? = nil   // step-record: keyboard notes land on this lane
     private var recCursor = 0              // step-record write position
 
@@ -441,6 +445,30 @@ final class ChiptunesDrawer: NSView {
             bar.leadingAnchor.constraint(equalTo: leadingAnchor),
             bar.trailingAnchor.constraint(equalTo: trailingAnchor),
             bar.heightAnchor.constraint(equalToConstant: Self.barHeight),
+        ])
+
+        // The looper content can be taller than the window on small displays (the feature
+        // panels add a lot), so host it in a vertical scroll view below the bar.
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(scroll)
+        contentScroll = scroll
+        let doc = FlippedView()   // flipped so content lays out top-down and scrolling starts at the top
+        doc.translatesAutoresizingMaskIntoConstraints = false
+        scroll.documentView = doc
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: bar.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
+            doc.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            doc.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
+            doc.trailingAnchor.constraint(equalTo: scroll.contentView.trailingAnchor),
+            doc.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
         ])
 
         // --- Transport row ---
@@ -573,33 +601,34 @@ final class ChiptunesDrawer: NSView {
         status.textColor = theme.textFaint
         status.translatesAutoresizingMaskIntoConstraints = false
 
-        for v in [transport, grid, kbControls, keyboard, tabs, host, status] { addSubview(v) }
+        for v in [transport, grid, kbControls, keyboard, tabs, host, status] { doc.addSubview(v) }
         NSLayoutConstraint.activate([
-            transport.topAnchor.constraint(equalTo: bar.bottomAnchor, constant: 14),
-            transport.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            transport.topAnchor.constraint(equalTo: doc.topAnchor, constant: 14),
+            transport.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
 
             grid.topAnchor.constraint(equalTo: transport.bottomAnchor, constant: 14),
-            grid.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            grid.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
+            grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
 
             kbControls.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 14),
-            kbControls.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            kbControls.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
 
             keyboard.topAnchor.constraint(equalTo: kbControls.bottomAnchor, constant: 8),
-            keyboard.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            keyboard.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            keyboard.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
+            keyboard.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
             keyboard.heightAnchor.constraint(equalToConstant: 58),
 
             tabs.topAnchor.constraint(equalTo: keyboard.bottomAnchor, constant: 12),
-            tabs.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            tabs.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
 
             host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 8),
-            host.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            host.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            host.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
+            host.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
             host.heightAnchor.constraint(equalToConstant: 124),
 
             status.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 8),
-            status.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            status.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
+            status.bottomAnchor.constraint(equalTo: doc.bottomAnchor, constant: -10),
         ])
 
         // "Pitch" label over the per-lane knob column (the knobs at each lane's right edge).
@@ -608,9 +637,9 @@ final class ChiptunesDrawer: NSView {
         pitchHeader.textColor = theme.textMuted
         pitchHeader.translatesAutoresizingMaskIntoConstraints = false
         pitchHeader.setAccessibilityElement(false)
-        addSubview(pitchHeader)
+        doc.addSubview(pitchHeader)
         NSLayoutConstraint.activate([
-            pitchHeader.centerXAnchor.constraint(equalTo: trailingAnchor, constant: -37),
+            pitchHeader.centerXAnchor.constraint(equalTo: doc.trailingAnchor, constant: -37),
             pitchHeader.bottomAnchor.constraint(equalTo: grid.topAnchor, constant: -1),
         ])
 
@@ -621,7 +650,7 @@ final class ChiptunesDrawer: NSView {
             glideHeader.textColor = theme.textMuted
             glideHeader.translatesAutoresizingMaskIntoConstraints = false
             glideHeader.setAccessibilityElement(false)
-            addSubview(glideHeader)
+            doc.addSubview(glideHeader)
             NSLayoutConstraint.activate([
                 glideHeader.centerXAnchor.constraint(equalTo: glideCol.centerXAnchor),
                 glideHeader.bottomAnchor.constraint(equalTo: grid.topAnchor, constant: -1),
@@ -889,6 +918,8 @@ final class ChiptunesDrawer: NSView {
         active = true
         engine.startAudioIfNeeded()
         installKeyMonitor()
+        // Start the drawer scrolled at the top (transport row visible).
+        DispatchQueue.main.async { [weak self] in self?.contentScroll?.contentView.scroll(to: .zero) }
         selectedROM = rom               // (active is true, so this kicks off a sample)
         autoSample(rom, debounce: false) // also sample immediately on open
     }

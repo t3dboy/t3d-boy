@@ -543,7 +543,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private let chiptunesDrawer = ChiptunesDrawer()
     private var chiptunesOpen = false
     private var chiptunesHeightConstraint: NSLayoutConstraint!
-    private let chiptunesBaseHeight: CGFloat = 540
+    private let chiptunesBaseHeight: CGFloat = 470
     private let chiptunesBonusHeight: CGFloat = 60 // extra room when the achievements drawer is open
     private var barHeight: CGFloat { ChiptunesDrawer.barHeight } // the always-visible launcher bar
     /// Drawer height when closed (just the bar) and open (bar + instrument).
