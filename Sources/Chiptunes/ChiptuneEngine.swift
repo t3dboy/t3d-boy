@@ -124,6 +124,11 @@ final class ChiptuneEngine {
         var pitches: [Int?]    = Array(repeating: nil, count: 16) // per-step note override (nil = root)
         var soundLock: [Int?]  = Array(repeating: nil, count: 16) // per-step palette-index override
 
+        // --- Live-loop overlay: a recorded performance that plays alongside the grid and is
+        //     independent of it (the main Clear leaves it alone; the loop track's own Clear wipes it).
+        var loopSteps: [Bool]   = Array(repeating: false, count: 16)
+        var loopPitches: [Int?] = Array(repeating: nil, count: 16)
+
         // --- Synth (GB-authentic) ---
         var arpOn = false
         var arpShape: ArpShape = .octave
@@ -378,28 +383,33 @@ final class ChiptuneEngine {
     /// The lane currently armed for live recording (keyboard notes land on it), or nil.
     var armedLane: Int?
 
-    /// Record a keyboard note into the armed lane, quantised onto the step the playhead is on
-    /// (so playing in time lands on the grid), and trigger it so you hear it immediately.
+    /// Record a keyboard note into the armed lane's LOOP OVERLAY, quantised onto the step the
+    /// playhead is on (so playing in time lands in the loop), and trigger it so you hear it.
+    /// The overlay is separate from the grid, so clearing the main sequencer leaves it playing.
     func liveRecord(_ note: Int) {
         guard let lane = armedLane, lanes.indices.contains(lane) else { return }
         let step = (isPlaying && currentStep >= 0) ? currentStep : max(0, lanePos[lane])
-        if lanes[lane].steps.indices.contains(step) {
-            lanes[lane].steps[step] = true
-            lanes[lane].pitches[step] = lanes[lane].patch.voice == .noise ? nil : note
+        if lanes[lane].loopSteps.indices.contains(step) {
+            lanes[lane].loopSteps[step] = true
+            lanes[lane].loopPitches[step] = lanes[lane].patch.voice == .noise ? nil : note
         }
         trigger(lanes[lane].patch, note: note, volume: lanes[lane].volume, lane: lane)
         onPatternChanged?()
     }
 
-    /// Wipe a single lane (its steps + per-step pitches) — the loop-track "clear".
+    /// Wipe a lane's recorded loop overlay (leaves its grid steps intact) — the loop-track "clear".
     func clearLane(_ lane: Int) {
         guard lanes.indices.contains(lane) else { return }
-        for s in lanes[lane].steps.indices { lanes[lane].steps[s] = false; lanes[lane].pitches[s] = nil }
+        for s in lanes[lane].loopSteps.indices { lanes[lane].loopSteps[s] = false; lanes[lane].loopPitches[s] = nil }
         onPatternChanged?()
     }
 
-    /// Whether a lane has any active steps (a recorded loop).
-    func hasContent(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].steps.contains(true) }
+    /// Whether a lane has a recorded loop overlay.
+    func hasContent(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].loopSteps.contains(true) }
+    /// Whether a lane's recorded loop has a note at this step (for drawing it on the grid).
+    func isLoopOn(lane: Int, step: Int) -> Bool {
+        lanes.indices.contains(lane) && lanes[lane].loopSteps.indices.contains(step) && lanes[lane].loopSteps[step]
+    }
 
     /// Fire every lane's content at one column (used by the beat-repeat / stutter pad).
     func triggerColumn(_ col: Int) {
@@ -575,28 +585,34 @@ final class ChiptuneEngine {
             let l = lanes[li]
             let len = max(1, min(stepCount, l.length))
             let pos = nextPos(lane: li, length: len)
-            guard !l.muted, !anySolo || l.solo, l.steps[pos] else { continue }
-            if l.probability[pos] < 100, Int.random(in: 0 ..< 100) >= l.probability[pos] { continue }
-            let note = l.pitches[pos] ?? l.rootNote
-            var patch = l.soundLock[pos].flatMap { palette.indices.contains($0) ? palette[$0] : nil } ?? l.patch
-            if l.soundShuffle {
-                let pool = palette.filter { $0.voice == l.patch.voice }
-                if let pick = pool.randomElement() { patch = pick }
+            guard !l.muted, !anySolo || l.solo else { continue }
+
+            // Main grid step (with probability, arp, ratchets, per-step pitch / sound lock).
+            if l.steps[pos], l.probability[pos] >= 100 || Int.random(in: 0 ..< 100) < l.probability[pos] {
+                let note = l.pitches[pos] ?? l.rootNote
+                var patch = l.soundLock[pos].flatMap { palette.indices.contains($0) ? palette[$0] : nil } ?? l.patch
+                if l.soundShuffle, let pick = palette.filter({ $0.voice == l.patch.voice }).randomElement() { patch = pick }
+                if l.arpOn {
+                    let offs = l.arpShape.offsets
+                    let n = max(1, min(8, l.arpRate))
+                    for k in 0 ..< n {
+                        pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(n),
+                                                  lane: li, note: note + offs[k % offs.count],
+                                                  volume: l.volume, patch: patch))
+                    }
+                } else {
+                    let r = max(1, min(8, l.ratchets[pos]))
+                    for k in 0 ..< r {
+                        pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(r),
+                                                  lane: li, note: note, volume: l.volume, patch: patch))
+                    }
+                }
             }
-            if l.arpOn {
-                let offs = l.arpShape.offsets
-                let n = max(1, min(8, l.arpRate))
-                for k in 0 ..< n {
-                    pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(n),
-                                              lane: li, note: note + offs[k % offs.count],
-                                              volume: l.volume, patch: patch))
-                }
-            } else {
-                let r = max(1, min(8, l.ratchets[pos]))
-                for k in 0 ..< r {
-                    pending.append(PendingHit(due: clockTime + stepDur * Double(k) / Double(r),
-                                              lane: li, note: note, volume: l.volume, patch: patch))
-                }
+
+            // Recorded loop overlay — plays independently of the grid (survives the main Clear).
+            if l.loopSteps[pos] {
+                let note = l.loopPitches[pos] ?? l.rootNote
+                pending.append(PendingHit(due: clockTime, lane: li, note: note, volume: l.volume, patch: l.patch))
             }
         }
     }

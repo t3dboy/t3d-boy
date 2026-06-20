@@ -80,6 +80,7 @@ func voiceColor(_ v: ChipVoice) -> NSColor {
 final class ChipStep: NSView {
     var on = false { didSet { needsDisplay = true; if on && !oldValue { pulse() } } }
     var playing = false { didSet { needsDisplay = true } }
+    var looped = false { didSet { needsDisplay = true } }   // a recorded live-loop note sits here
     var tint: NSColor = .systemBlue
     var onToggle: (() -> Void)?
     private let pulseLayer = CALayer()
@@ -123,6 +124,13 @@ final class ChipStep: NSView {
             theme.lineHair.setStroke()
         }
         path.lineWidth = 1; path.stroke()
+
+        // Recorded loop note: a centre dot so it shows on the grid distinct from grid steps.
+        if looped {
+            let d: CGFloat = min(6, r.width * 0.45)
+            let dot = NSBezierPath(ovalIn: NSRect(x: r.midX - d / 2, y: r.midY - d / 2, width: d, height: d))
+            (on ? theme.onAccent : tint).setFill(); dot.fill()
+        }
     }
 }
 
@@ -623,16 +631,7 @@ final class ChiptunesDrawer: NSView {
         kbFXToggle.onToggle = { [weak self] on in self?.kbUseFX = on }
 
         keyboard.translatesAutoresizingMaskIntoConstraints = false
-        keyboard.onNote = { [weak self] note in
-            guard let self else { return }
-            // If a loop track is armed (Perform tab), the keyboard records into it, quantised
-            // to the playhead; otherwise it plays the selected keyboard sound.
-            if self.engine.armedLane != nil {
-                self.engine.liveRecord(note)
-            } else if let patch = self.kbPatch {
-                self.engine.playKey(patch, note: note, throughFX: self.kbUseFX)
-            }
-        }
+        keyboard.onNote = { [weak self] note in self?.playNote(note) }
 
         let kbControls = NSStackView(views: [kbCaption, kbMenu, spacer(20),
                                              labeledControl(kbFXToggle, "Use FX")])
@@ -944,8 +943,8 @@ final class ChiptunesDrawer: NSView {
               let note = keyboard.note(for: ch) else { return event }
         switch event.type {
         case .keyDown:
-            if !event.isARepeat, let patch = kbPatch {
-                engine.playKey(patch, note: note, throughFX: kbUseFX)
+            if !event.isARepeat {
+                playNote(note)
                 keyboard.setPressed(true, note: note)
             }
             return nil
@@ -954,6 +953,16 @@ final class ChiptunesDrawer: NSView {
             return nil
         default:
             return event
+        }
+    }
+
+    /// A keyboard note (mouse-clicked key or QWERTY). If a loop track is armed (Perform tab),
+    /// it records into that track quantised to the playhead; otherwise it plays the keyboard sound.
+    private func playNote(_ note: Int) {
+        if engine.armedLane != nil {
+            engine.liveRecord(note)
+        } else if let patch = kbPatch {
+            engine.playKey(patch, note: note, throughFX: kbUseFX)
         }
     }
 
@@ -997,7 +1006,10 @@ final class ChiptunesDrawer: NSView {
 
     private func refreshSteps() {
         for (lane, cells) in laneSteps.enumerated() {
-            for (s, cell) in cells.enumerated() { cell.on = engine.isStepOn(lane: lane, step: s) }
+            for (s, cell) in cells.enumerated() {
+                cell.on = engine.isStepOn(lane: lane, step: s)
+                cell.looped = engine.isLoopOn(lane: lane, step: s)
+            }
         }
     }
 
@@ -1031,11 +1043,11 @@ final class ChiptunesDrawer: NSView {
     }
 
     private func clearAll() {
-        if engine.isPlaying { togglePlay() } // stop the loop
+        // Clear the grid pattern but leave any recorded loop layers playing (live-looping). Keep
+        // the transport running; use Stop Sequencer to halt. Only flush held notes when stopped.
         engine.clear()
-        engine.panic()                        // silence any ringing notes
+        if !engine.isPlaying { engine.panic() }
         refreshSteps()
-        highlight(-1)
     }
 
     /// Screenshot mode: load made-up sounds and a pre-filled beat so the looper looks alive.
