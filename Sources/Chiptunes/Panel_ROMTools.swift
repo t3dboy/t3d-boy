@@ -86,17 +86,19 @@ final class ROMToolsPanel: NSView {
             sub: nil,
             content: mashStack)
 
-        // --- Lay out the three sections with dividers between them ---
+        // --- Lay out the three sections with dividers between them, spread across the full
+        // width (equal spacing) now that the panel spans the whole drawer. ---
         let columns = NSStackView(views: [composeSection, divider(), shuffleSection, divider(), mashSection])
         columns.orientation = .horizontal
         columns.alignment = .centerY
+        columns.distribution = .equalSpacing
         columns.spacing = 30
         columns.translatesAutoresizingMaskIntoConstraints = false
         addSubview(columns)
         NSLayoutConstraint.activate([
             columns.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 16),
-            columns.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            columns.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
+            columns.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            columns.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
             columns.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -16),
             columns.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])

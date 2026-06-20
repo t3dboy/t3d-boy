@@ -215,15 +215,17 @@ the nature of real glass.)
 T3d Tunes turns the Game Boy's sound hardware into a looping chiptune instrument and **live
 looper**, **seeded with the sounds of the ROM you've selected**. Open it from the full-width
 **♪ T3d Tunes** bar at the bottom of the library — it expands to fill the window, leaving the
-console tabs and ROM list showing at the top so you can **still switch games** as you play.
+console tabs and ROM list showing at the top so you can **still switch games** as you play. The
+top strip reflows to a compact row — the selected game's **box art**, its **details**, and a
+live **oscilloscope** of the instrument's output on the right.
 
 - **It samples the selected game.** On opening (and whenever you pick another game) T3d
   Tunes briefly runs that ROM and captures the actual sounds it uses — pulse leads, basses,
   the wave channel's custom waveforms, noise percussion.
 - **Four lanes = the four Game Boy channels** — Pulse 1, Pulse 2, Wave, Noise. Each lane
-  has a **dropdown** to choose which of that channel's captured sounds it plays, a **16-step
-  grid** (tap to lay the sound into the loop), a **Glide** switch (portamento; pitched lanes
-  only), a **pitch knob**, and a **mute**.
+  has a **REC** button (live looping — see below), a **dropdown** to choose which of that
+  channel's captured sounds it plays, a **16-step grid** (tap to lay the sound into the loop),
+  a **Glide** switch (portamento; pitched lanes only), a **pitch knob**, and a **mute**.
 - **Transport** — **Play Sequencer**/Stop and a BPM control. **Clear** wipes the grid pattern
   but keeps playing (so recorded loops carry on — see *Live looping*). **Dice** (🎲) rolls a
   random pattern; **Reset** (↺) returns the FX/groove to neutral.
@@ -234,30 +236,33 @@ console tabs and ROM list showing at the top so you can **still switch games** a
   its **Keyboard** dropdown, then play it by clicking or from your computer keyboard: keys map
   chromatically from C3 — `QWERTYUIOP`, then `ASDFGHJKL`, then `ZXCVBN` (the bound letter is
   printed on each key). The **Use FX** switch plays it dry or through the FX.
-- **Feature panels** — a tab bar selects five panels, with a live **oscilloscope** always
-  shown alongside:
+- **Feature panels** — a full-width tab bar selects five panels:
   - **Rhythm** — per-lane length (polymeter), playback direction, step probability, Euclidean
-    fill, and a Mutate button.
-  - **Timbre** — per-lane arpeggiator, PWM, vibrato and ratchets.
-  - **Perform** — the live loop station (below).
+    fill, and a Mutate button — one **channel card** per quarter.
+  - **Timbre** — per-lane arpeggiator, PWM, vibrato and ratchets — one **channel card** per
+    quarter.
+  - **Perform** — global performance controls: **Tap** tempo, a hold-to-roll **Stutter** pad,
+    a **Pump** sidechain, and a **Clear All Loops** button.
   - **Visual** — a draggable wavetable editor for the wave channel, plus **Export WAV**.
   - **ROM** — Auto-compose a loop from the cartridge's sounds, per-lane sound-shuffle, and a
     two-game Mashup.
 
-### Live looping (the Perform tab)
+### Live looping (the per-row REC buttons)
 
-The four lanes double as four **loop tracks** sharing the clock, so you can build a song by
-layering parts:
+Live looping is built into the sequencer rows. Each lane has its own **REC** button, so you
+build a song by banking and layering patterns lane by lane:
 
-1. Press **Play Sequencer**.
-2. Tap **REC** on a track and play a part on the keyboard *in time* — your notes record onto a
-   loop layer (shown as dots on the grid) and loop.
-3. Move **REC** to the next track to layer the next part; **MUTE** brings tracks in and out.
+1. Press **Play Sequencer** and lay a pattern on a lane's grid.
+2. Hit that lane's **REC** — the pattern is **banked into a loop** and the grid clears, but the
+   loop keeps playing. Banked steps show as small **dots** on the grid.
+3. Lay a new pattern on the same lane and hit **REC** again to **stack another layer** — steps
+   you bank twice get **two dots**, and so on.
 
-The recorded loops are a **separate layer from the step grid**: the main **Clear** wipes only
-the grid and keeps playing, so your loops keep looping while you build something new
-underneath. A track's own **CLEAR** wipes just that loop; **Stop Sequencer** halts everything.
-The panel also has **Tap** tempo, a hold-to-roll **Stutter** pad, and a **Pump** sidechain.
+Banked loops are **independent of the step grid**: the main **Clear** wipes only the editable
+grid and keeps playing, so your loops carry on while you build something new underneath. To
+remove a lane's loop, **⌥-click** (or right-click) its REC button, or use **Clear All Loops**
+on the Perform tab. **Stop Sequencer** halts everything. The Perform tab also has **Tap**
+tempo, a hold-to-roll **Stutter** pad, and a **Pump** sidechain.
 
 Notes are gated to a short one-shot so the detached chip doesn't drone. T3d Tunes adopts the
 active theme (it looks most at home in Engineer, and goes glassy in Liquid Glass).

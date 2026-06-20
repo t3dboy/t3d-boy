@@ -139,7 +139,9 @@ case "--demoshot": // --demoshot <out.png> : offscreen render of the demo librar
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     let lib = LibraryWindowController()
-    let ok = lib.renderDemoShot(to: URL(fileURLWithPath: arguments[2]))
+    let tunes = arguments.contains("tunes")
+    let panel = arguments.dropFirst(3).compactMap { Int($0) }.first ?? 0
+    let ok = lib.renderDemoShot(to: URL(fileURLWithPath: arguments[2]), openTunes: tunes, panel: panel)
     print(ok ? "Wrote \(arguments[2])" : "Failed to render demo shot")
     exit(ok ? 0 : 1)
 case "--boot": // --boot <out.png> [cgb] : render the settled boot logo frame

@@ -249,28 +249,28 @@ final class OutputPanel: NSView {
         }
 
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 210),
+            heightAnchor.constraint(equalToConstant: 240),
 
-            // Wavetable section (left). 16pt insets; caption above a 340×150 editor + presets.
+            // Wavetable section (left). Now that the panel spans the full drawer, the editor
+            // gets a much wider canvas to draw on; 40pt insets give it room to breathe.
             waveCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            waveCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            waveCap.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
             editor.topAnchor.constraint(equalTo: waveCap.bottomAnchor, constant: 6),
-            editor.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            editor.widthAnchor.constraint(equalToConstant: 340),
+            editor.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
             editor.heightAnchor.constraint(equalToConstant: 150),
             presets.topAnchor.constraint(equalTo: editor.bottomAnchor, constant: 6),
             presets.leadingAnchor.constraint(equalTo: editor.leadingAnchor),
             presets.trailingAnchor.constraint(equalTo: editor.trailingAnchor),
             presets.heightAnchor.constraint(equalToConstant: 24),
 
-            // Export section (right). ~30pt gap after the editor; caption above the button.
-            exportCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            exportCap.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 30),
+            // Export section (far right), with a comfortable gap after the editor.
+            exportButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -48),
+            exportButton.widthAnchor.constraint(equalToConstant: 150),
             exportButton.topAnchor.constraint(equalTo: exportCap.bottomAnchor, constant: 6),
-            exportButton.leadingAnchor.constraint(equalTo: editor.trailingAnchor, constant: 30),
-            exportButton.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -16),
-            exportButton.widthAnchor.constraint(equalToConstant: 140),
             exportButton.heightAnchor.constraint(equalToConstant: 30),
+            exportCap.leadingAnchor.constraint(equalTo: exportButton.leadingAnchor),
+            exportCap.topAnchor.constraint(equalTo: topAnchor, constant: 16),
+            editor.trailingAnchor.constraint(equalTo: exportButton.leadingAnchor, constant: -64),
         ])
     }
 

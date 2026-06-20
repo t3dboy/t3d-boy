@@ -124,10 +124,11 @@ final class ChiptuneEngine {
         var pitches: [Int?]    = Array(repeating: nil, count: 16) // per-step note override (nil = root)
         var soundLock: [Int?]  = Array(repeating: nil, count: 16) // per-step palette-index override
 
-        // --- Live-loop overlay: a recorded performance that plays alongside the grid and is
-        //     independent of it (the main Clear leaves it alone; the loop track's own Clear wipes it).
-        var loopSteps: [Bool]   = Array(repeating: false, count: 16)
-        var loopPitches: [Int?] = Array(repeating: nil, count: 16)
+        // --- Live-loop bank: banked layers that play alongside the grid and survive the main
+        //     Clear. `loopCount` is how many layers were banked onto each step (drawn as dots);
+        //     `loopNote` is the note that step plays. REC banks the grid into here.
+        var loopCount: [Int]   = Array(repeating: 0, count: 16)
+        var loopNote: [Int?]   = Array(repeating: nil, count: 16)
 
         // --- Synth (GB-authentic) ---
         var arpOn = false
@@ -378,37 +379,41 @@ final class ChiptuneEngine {
         onPatternChanged?()
     }
 
-    // MARK: Live looping (loop-station style)
+    // MARK: Live looping (per-track banking)
 
-    /// The lane currently armed for live recording (keyboard notes land on it), or nil.
-    var armedLane: Int?
-
-    /// Record a keyboard note into the armed lane's LOOP OVERLAY, quantised onto the step the
-    /// playhead is on (so playing in time lands in the loop), and trigger it so you hear it.
-    /// The overlay is separate from the grid, so clearing the main sequencer leaves it playing.
-    func liveRecord(_ note: Int) {
-        guard let lane = armedLane, lanes.indices.contains(lane) else { return }
-        let step = (isPlaying && currentStep >= 0) ? currentStep : max(0, lanePos[lane])
-        if lanes[lane].loopSteps.indices.contains(step) {
-            lanes[lane].loopSteps[step] = true
-            lanes[lane].loopPitches[step] = lanes[lane].patch.voice == .noise ? nil : note
-        }
-        trigger(lanes[lane].patch, note: note, volume: lanes[lane].volume, lane: lane)
-        onPatternChanged?()
-    }
-
-    /// Wipe a lane's recorded loop overlay (leaves its grid steps intact) — the loop-track "clear".
-    func clearLane(_ lane: Int) {
+    /// Bank the lane's current editable grid into its loop layer, then clear the grid.
+    /// Each on step increments that step's loop layer count (drawn as stacked dots) and
+    /// captures the note. The banked loop keeps playing; the grid is wiped so you can
+    /// layer a new pattern on top and bank again. This is the per-row REC action.
+    func bankLane(_ lane: Int) {
         guard lanes.indices.contains(lane) else { return }
-        for s in lanes[lane].loopSteps.indices { lanes[lane].loopSteps[s] = false; lanes[lane].loopPitches[s] = nil }
+        var banked = false
+        for s in lanes[lane].steps.indices where lanes[lane].steps[s] {
+            lanes[lane].loopCount[s] += 1
+            lanes[lane].loopNote[s] = lanes[lane].patch.voice == .noise
+                ? nil
+                : (lanes[lane].pitches[s] ?? lanes[lane].rootNote)
+            banked = true
+        }
+        guard banked else { return }
+        // Clear the editable grid so the next layer starts fresh — the loop keeps playing.
+        for s in lanes[lane].steps.indices { lanes[lane].steps[s] = false; lanes[lane].pitches[s] = nil }
         onPatternChanged?()
     }
 
-    /// Whether a lane has a recorded loop overlay.
-    func hasContent(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].loopSteps.contains(true) }
-    /// Whether a lane's recorded loop has a note at this step (for drawing it on the grid).
-    func isLoopOn(lane: Int, step: Int) -> Bool {
-        lanes.indices.contains(lane) && lanes[lane].loopSteps.indices.contains(step) && lanes[lane].loopSteps[step]
+    /// Wipe a lane's banked loop (leaves its grid steps intact) — the loop-track "clear".
+    func clearLoop(_ lane: Int) {
+        guard lanes.indices.contains(lane) else { return }
+        for s in lanes[lane].loopCount.indices { lanes[lane].loopCount[s] = 0; lanes[lane].loopNote[s] = nil }
+        onPatternChanged?()
+    }
+
+    /// Whether a lane has any banked loop layers.
+    func hasContent(lane: Int) -> Bool { lanes.indices.contains(lane) && lanes[lane].loopCount.contains { $0 > 0 } }
+    /// How many loop layers are banked on a given step (0 = none) — for drawing stacked dots.
+    func loopLayerCount(lane: Int, step: Int) -> Int {
+        guard lanes.indices.contains(lane), lanes[lane].loopCount.indices.contains(step) else { return 0 }
+        return lanes[lane].loopCount[step]
     }
 
     /// Fire every lane's content at one column (used by the beat-repeat / stutter pad).
@@ -609,9 +614,9 @@ final class ChiptuneEngine {
                 }
             }
 
-            // Recorded loop overlay — plays independently of the grid (survives the main Clear).
-            if l.loopSteps[pos] {
-                let note = l.loopPitches[pos] ?? l.rootNote
+            // Banked loop layers — play independently of the grid (survive the main Clear).
+            if l.loopCount[pos] > 0 {
+                let note = l.loopNote[pos] ?? l.rootNote
                 pending.append(PendingHit(due: clockTime, lane: li, note: note, volume: l.volume, patch: l.patch))
             }
         }

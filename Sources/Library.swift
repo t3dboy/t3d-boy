@@ -529,6 +529,19 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     private var t3dLightRow: NSView?
     private var effectsTimer: Timer?
 
+    // Compact detail strip — shown in the reveal above the T3d Tunes drawer. It reflows the
+    // normal detail pane (art + title/stats + lighting) horizontally into the slim space, with
+    // the lighting descriptions dropped. Hidden (and the normal pane restored) when tunes closes.
+    private let compactDetail = NSView()
+    private let compactArt = NSImageView()
+    private let compactTitle = NSTextField(labelWithString: "")
+    private let compactStats = NSTextField(labelWithString: "")
+    private let compactFav = CapsuleButton(title: "☆", style: .neutral, fontSize: 13, height: 24)
+    private let compactScope = LiveScope()   // oscilloscope in the top-right of the reveal
+    private var compactConstraints: [NSLayoutConstraint] = []
+    /// Normal detail-pane views hidden while the compact strip is showing.
+    private var normalDetailViews: [NSView] { [artView, titleLabel, statsLabel, playButton, favButton, effectsHousing] }
+
     // Achievements drawer: tucked off the right edge, popped out via the handle to
     // browse the selected game's achievements before playing.
     private let achievementsDrawer = AchievementsDrawer()
@@ -751,6 +764,8 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         buildEffectsHousing()
         content.addSubview(effectsHousing)
 
+        buildCompactDetail()
+
         // Achievements drawer + handle, pinned past the right edge of the detail pane.
         // Collapsed (width 0) by default; popping it out widens the window rightward.
         achievementsDrawer.translatesAutoresizingMaskIntoConstraints = false
@@ -865,6 +880,14 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         // Keep the chiptunes drawer on top of any theme chrome (e.g. the Engineer trim) so
         // the bar stays clickable and the drawer covers cleanly.
         content.addSubview(chiptunesDrawer, positioned: .above, relativeTo: nil)
+        // Compact strip rides just above the drawer's bar; activated only while tunes is open.
+        content.addSubview(compactDetail, positioned: .below, relativeTo: chiptunesDrawer)
+        compactConstraints = [
+            compactDetail.topAnchor.constraint(equalTo: content.topAnchor, constant: topInset),
+            compactDetail.leadingAnchor.constraint(equalTo: scroll.trailingAnchor, constant: 20),
+            compactDetail.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -20),
+            compactDetail.bottomAnchor.constraint(equalTo: chiptunesDrawer.topAnchor, constant: -10),
+        ]
 
         styleChrome()
     }
@@ -1021,6 +1044,91 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         syncEffectsUI()
     }
 
+    /// Build the compact detail strip (art ▸ title/stats ▸ lighting) used in the reveal while
+    /// T3d Tunes is open. Only its internal layout is set here; the outer placement constraints
+    /// (`compactConstraints`) are wired in `build()` and toggled by `setChiptunes`.
+    private func buildCompactDetail() {
+        compactDetail.translatesAutoresizingMaskIntoConstraints = false
+        compactDetail.isHidden = true
+
+        // Art (left)
+        compactArt.translatesAutoresizingMaskIntoConstraints = false
+        compactArt.wantsLayer = true
+        compactArt.imageScaling = .scaleProportionallyUpOrDown
+        compactArt.layer?.cornerRadius = theme.skinned ? 6 : 8
+        compactArt.layer?.masksToBounds = true
+        compactArt.layer?.magnificationFilter = .nearest
+        compactArt.layer?.backgroundColor = theme.surfaceScreen.cgColor
+        compactArt.layer?.borderWidth = 1
+        compactArt.layer?.borderColor = theme.controlEdge.cgColor
+        compactArt.setAccessibilityLabel("Box art")
+        compactDetail.addSubview(compactArt)
+
+        // Detail (middle): title, stats, favourite
+        compactTitle.font = .systemFont(ofSize: 16, weight: .bold)
+        compactTitle.lineBreakMode = .byTruncatingTail
+        compactTitle.maximumNumberOfLines = 2
+        compactTitle.translatesAutoresizingMaskIntoConstraints = false
+        compactStats.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        compactStats.textColor = .secondaryLabelColor
+        compactStats.lineBreakMode = .byTruncatingTail
+        compactStats.translatesAutoresizingMaskIntoConstraints = false
+        compactFav.onClick = { [weak self] in self?.toggleFavourite() }
+        let detailStack = NSStackView(views: [compactTitle, compactStats, compactFav])
+        detailStack.orientation = .vertical
+        detailStack.alignment = .leading
+        detailStack.spacing = 6
+        detailStack.translatesAutoresizingMaskIntoConstraints = false
+        compactDetail.addSubview(detailStack)
+
+        // No lighting toggles here — they don't make sense squashed into the reveal, and the
+        // full set is one drawer-close away. Compact strip is artwork + game detail, with the
+        // oscilloscope filling the black area on the right (borderless, blends in).
+        compactScope.chromeless = true
+        compactScope.engine = chiptunesDrawer.engine
+        compactScope.translatesAutoresizingMaskIntoConstraints = false
+        compactScope.setAccessibilityLabel("Oscilloscope")
+        compactDetail.addSubview(compactScope)
+
+        NSLayoutConstraint.activate([
+            compactArt.leadingAnchor.constraint(equalTo: compactDetail.leadingAnchor),
+            compactArt.topAnchor.constraint(equalTo: compactDetail.topAnchor, constant: 4),
+            compactArt.bottomAnchor.constraint(equalTo: compactDetail.bottomAnchor, constant: -4),
+            compactArt.widthAnchor.constraint(equalTo: compactArt.heightAnchor, multiplier: 10.0 / 9.0),
+
+            detailStack.leadingAnchor.constraint(equalTo: compactArt.trailingAnchor, constant: 18),
+            detailStack.centerYAnchor.constraint(equalTo: compactDetail.centerYAnchor),
+            detailStack.trailingAnchor.constraint(lessThanOrEqualTo: compactScope.leadingAnchor, constant: -18),
+
+            compactScope.trailingAnchor.constraint(equalTo: compactDetail.trailingAnchor),
+            compactScope.topAnchor.constraint(equalTo: compactDetail.topAnchor, constant: 2),
+            compactScope.bottomAnchor.constraint(equalTo: compactDetail.bottomAnchor, constant: -2),
+            compactScope.widthAnchor.constraint(equalToConstant: 360),
+        ])
+        detailStack.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        compactScope.setContentHuggingPriority(.required, for: .horizontal)
+    }
+
+    /// Pull the current selection (art, title, stats, favourite) into the compact strip.
+    private func syncCompactDetail() {
+        guard let rom = currentSelectedROM() else {
+            compactTitle.stringValue = ""; compactStats.stringValue = ""
+            compactFav.title = "☆"; compactArt.image = nil
+            return
+        }
+        compactTitle.stringValue = theme.cased(displayName(rom, stripTags: true))
+        compactStats.stringValue = statsLabel.stringValue   // computed by updateStats on selection
+        compactFav.title = Favourites.isFavourite(rom) ? "★" : "☆"
+        if DemoMode.isActive {
+            compactArt.image = DemoMode.art.map { NSImage(cgImage: $0, size: .zero) }
+        } else {
+            ThumbnailStore.shared.art(for: rom) { [weak self] image in
+                guard let self, self.currentSelectedROM() == rom else { return }
+                self.compactArt.image = image.map { NSImage(cgImage: $0, size: .zero) }
+            }
+        }
+    }
+
     /// One effect row: title + an optional trailing accessory (the toggle), a greyed
     /// hint underneath, and an optional `footer` (e.g. a "not compatible" pill) below the
     /// hint. `dim` greys the title for unavailable options.
@@ -1128,15 +1236,19 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
     /// marketing shot. Renders the layer-backed content tree directly, so it needs
     /// no screen-recording permission. Requires `DemoMode.isActive`.
     @discardableResult
-    func renderDemoShot(to url: URL, scale: CGFloat = 2.0) -> Bool {
+    func renderDemoShot(to url: URL, scale: CGFloat = 2.0, openTunes: Bool = false, panel: Int = 0) -> Bool {
         guard let window = window, let content = window.contentView else { return false }
         // Clean art: no lighting effects on the box-art preview.
         HardcoreLighting.isEnabled = false
         WormLight.isEnabled = false
         T3dBoyLight.isEnabled = false
 
-        window.setContentSize(NSSize(width: 880, height: 600))
+        window.setContentSize(NSSize(width: openTunes ? 1020 : 880, height: openTunes ? 980 : 600))
         reload()
+        if tableView.selectedRow < 0, !roms.isEmpty {
+            tableView.selectRowIndexes([0], byExtendingSelection: false)
+        }
+        if openTunes { setChiptunes(open: true, animated: false); chiptunesDrawer.showPanel(panel) }
 
         // Force a full layout + display pass so every layer has committed contents
         // (table rows, the boot-screen art, the themed toggles).
@@ -1389,11 +1501,16 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
             }
         }
         schedulePreview(immediate: false) // refresh the achievements drawer for the new pick
+        if chiptunesOpen { syncCompactDetail() } // keep the reveal strip current
     }
 
     // MARK: - Actions
 
     @objc private func playSelected() {
+        // While T3d Tunes is open the ROM list stays exposed only so you can pick a game to
+        // *sample* — never to boot it. Suppress launch (double-click / Play) so a stray click
+        // near the drawer doesn't drop you out of the looper into a game.
+        guard !chiptunesOpen else { return }
         guard tableView.selectedRow >= 0, tableView.selectedRow < roms.count else { return }
         onPlay?(roms[tableView.selectedRow], artScreenRect())
     }
@@ -1434,6 +1551,7 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
 
     private func updateFavButton(for rom: URL) {
         favButton.title = Favourites.isFavourite(rom) ? "★ Unfavourite" : "☆ Favourite"
+        compactFav.title = Favourites.isFavourite(rom) ? "★" : "☆"
     }
 
     @objc private func toggleFavourite() {
@@ -1498,6 +1616,20 @@ final class LibraryWindowController: NSWindowController, NSTableViewDataSource, 
         } else {
             chiptunesHeightConstraint.constant = drawerTarget
             window.setFrame(targetFrame, display: true)
+        }
+
+        // Swap the right-hand detail pane for the compact reveal strip (and back).
+        if open {
+            normalDetailViews.forEach { $0.isHidden = true }
+            syncCompactDetail()
+            compactDetail.isHidden = false
+            NSLayoutConstraint.activate(compactConstraints)
+            compactScope.start()
+        } else {
+            compactScope.stop()
+            NSLayoutConstraint.deactivate(compactConstraints)
+            compactDetail.isHidden = true
+            normalDetailViews.forEach { $0.isHidden = false }
         }
 
         if open {

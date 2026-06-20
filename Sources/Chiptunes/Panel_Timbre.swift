@@ -12,16 +12,6 @@ final class TimbrePanel: NSView {
     private let engine: ChiptuneEngine
     private let onChange: () -> Void
 
-    // Column x-positions (leading edge), tuned to fit ~900pt wide within the host's insets.
-    // Spacing between a row's controls is ~18pt; columns align across all four lanes.
-    private let xLabel: CGFloat = 0
-    private let xArpToggle: CGFloat = 72
-    private let xArpShape: CGFloat = 116
-    private let xArpRate: CGFloat = 218
-    private let xPWM: CGFloat = 296
-    private let xVib: CGFloat = 388
-    private let xRatchet: CGFloat = 480
-
     init(engine: ChiptuneEngine, onChange: @escaping () -> Void) {
         self.engine = engine
         self.onChange = onChange
@@ -34,38 +24,47 @@ final class TimbrePanel: NSView {
     // MARK: Build
 
     private func build() {
-        // Column-header caption row, aligned over each control column.
-        let header = NSView()
-        header.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(header)
-        for (x, t) in [(xArpToggle, "Arp"), (xPWM, "PWM"), (xVib, "Vib"), (xRatchet, "Ratchet")] {
-            let cap = caption(t)
-            header.addSubview(cap)
-            NSLayoutConstraint.activate([
-                cap.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: x),
-                cap.centerYAnchor.constraint(equalTo: header.centerYAnchor),
-            ])
-        }
-
-        let rows = NSStackView()
-        rows.orientation = .vertical
-        rows.alignment = .leading
-        rows.spacing = 6
-        rows.translatesAutoresizingMaskIntoConstraints = false
-        for i in 0 ..< 4 { rows.addArrangedSubview(laneRow(lane: i)) }
-        addSubview(rows)
-
-        // Height budget (≤210): top 16 + header 12 + gap 6 + 4×38 + 3×6 = 204.
+        // 2×2 grid: one card per channel.
+        let cards = (0 ..< 4).map { laneRow(lane: $0) }
+        let top = quarterRow([cards[0], cards[1]])
+        let bottom = quarterRow([cards[2], cards[3]])
+        let grid = NSStackView(views: [top, bottom])
+        grid.orientation = .vertical
+        grid.distribution = .fillEqually
+        grid.spacing = 10
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(grid)
         NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            header.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            header.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            header.heightAnchor.constraint(equalToConstant: 12),
-
-            rows.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 6),
-            rows.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            rows.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            grid.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            grid.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            grid.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            grid.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
         ])
+    }
+
+    private func quarterRow(_ cards: [NSView]) -> NSStackView {
+        let r = NSStackView(views: cards)
+        r.orientation = .horizontal
+        r.distribution = .fillEqually
+        r.spacing = 12
+        return r
+    }
+
+    /// A horizontal control group.
+    private func hRow(_ views: [NSView], _ spacing: CGFloat) -> NSStackView {
+        let s = NSStackView(views: views)
+        s.orientation = .horizontal; s.alignment = .centerY; s.spacing = spacing
+        return s
+    }
+
+    /// A control with a caption above it.
+    private func captioned(_ title: String, _ control: NSView, dim: Bool = false) -> NSView {
+        let cap = caption(title)
+        let v = NSStackView(views: [cap, control])
+        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 5
+        v.translatesAutoresizingMaskIntoConstraints = false
+        if dim { v.alphaValue = 0.32 }
+        return v
     }
 
     private func laneRow(lane: Int) -> NSView {
@@ -73,17 +72,23 @@ final class TimbrePanel: NSView {
         let accent = voiceColor(voice)
         let isPitched = (voice != .noise)
         let row = NSView()
+        row.wantsLayer = true
+        row.layer?.cornerRadius = theme.radiusMedium
+        row.layer?.backgroundColor = accent.withAlphaComponent(0.07).cgColor
+        row.layer?.borderWidth = 1
+        row.layer?.borderColor = accent.withAlphaComponent(0.28).cgColor
         row.translatesAutoresizingMaskIntoConstraints = false
 
         // [● + label]
         let dot = NSView()
         dot.wantsLayer = true
         dot.layer?.backgroundColor = accent.cgColor
-        dot.layer?.cornerRadius = 4
+        dot.layer?.cornerRadius = 5
         dot.translatesAutoresizingMaskIntoConstraints = false
         let label = NSTextField(labelWithString: theme.cased(voice.short))
-        label.font = theme.fontMonoSmall
+        label.font = theme.skinned ? .rounded(14, .semibold) : .systemFont(ofSize: 14, weight: .bold)
         label.textColor = accent
+        label.setAccessibilityElement(false)
         label.translatesAutoresizingMaskIntoConstraints = false
 
         let arp = engine.arpInfo(lane: lane)
@@ -97,7 +102,7 @@ final class TimbrePanel: NSView {
         // Arp shape menu
         let shapeMenu = NSPopUpButton(frame: .zero, pullsDown: false)
         shapeMenu.translatesAutoresizingMaskIntoConstraints = false
-        shapeMenu.controlSize = .small
+        shapeMenu.controlSize = .regular
         shapeMenu.font = theme.fontCaption
         shapeMenu.addItems(withTitles: ArpShape.allCases.map { theme.cased($0.label) })
         shapeMenu.selectItem(at: arp.shape.rawValue)
@@ -107,7 +112,7 @@ final class TimbrePanel: NSView {
         // Arp rate stepper (1…8)
         let rateStepper = NSStepper()
         rateStepper.translatesAutoresizingMaskIntoConstraints = false
-        rateStepper.controlSize = .small
+        rateStepper.controlSize = .regular
         rateStepper.minValue = 1
         rateStepper.maxValue = 8
         rateStepper.increment = 1
@@ -142,7 +147,7 @@ final class TimbrePanel: NSView {
         objc_setAssociatedObject(row, &Self.relayKeyB, rateRelay, .OBJC_ASSOCIATION_RETAIN)
 
         // PWM knob (0…1)
-        let pwmKnob = ChipKnob(value: engine.pwm(lane: lane), in: 0 ... 1)
+        let pwmKnob = ChipKnob(value: engine.pwm(lane: lane), in: 0 ... 1, diameter: 52)
         pwmKnob.setAccessibilityLabel("\(voice.short) pulse-width modulation")
         pwmKnob.onChange = { [weak self] v in
             guard let self else { return }
@@ -151,7 +156,7 @@ final class TimbrePanel: NSView {
         }
 
         // Vibrato depth knob (0…1) — preserves the lane's current rate.
-        let vibKnob = ChipKnob(value: engine.vibratoInfo(lane: lane).depth, in: 0 ... 1)
+        let vibKnob = ChipKnob(value: engine.vibratoInfo(lane: lane).depth, in: 0 ... 1, diameter: 52)
         vibKnob.setAccessibilityLabel("\(voice.short) vibrato depth")
         vibKnob.onChange = { [weak self] v in
             guard let self else { return }
@@ -164,7 +169,7 @@ final class TimbrePanel: NSView {
         let initialRatchet = engine.ratchet(lane: lane, step: 0)
         let ratchetStepper = NSStepper()
         ratchetStepper.translatesAutoresizingMaskIntoConstraints = false
-        ratchetStepper.controlSize = .small
+        ratchetStepper.controlSize = .regular
         ratchetStepper.minValue = 1
         ratchetStepper.maxValue = 8
         ratchetStepper.increment = 1
@@ -187,81 +192,50 @@ final class TimbrePanel: NSView {
         ratchetStepper.action = #selector(ActionRelay.fire)
         objc_setAssociatedObject(row, &Self.relayKeyC, ratchetRelay, .OBJC_ASSOCIATION_RETAIN)
 
-        // Dim the pitch-only cells on the NOISE lane.
-        let pwmCell = wrapKnob(pwmKnob)
-        let vibCell = wrapKnob(vibKnob)
-        if !isPitched {
-            for v in [arpToggle, shapeMenu, rateStepper, rateReadout, pwmCell, vibCell] as [NSView] {
-                v.alphaValue = 0.32
-            }
-        }
+        // --- Header (dot + channel name) ---
+        let header = NSStackView(views: [dot, label])
+        header.orientation = .horizontal; header.alignment = .centerY; header.spacing = 7
+        header.translatesAutoresizingMaskIntoConstraints = false
 
-        // --- Layout ---
-        for v in [dot, label, arpToggle, shapeMenu, rateStepper, rateReadout,
-                  pwmCell, vibCell, ratchetStepper, ratchetReadout] as [NSView] {
-            v.translatesAutoresizingMaskIntoConstraints = false
-            row.addSubview(v)
-        }
+        // --- Captioned control groups, spread across the card's quarter. ---
+        shapeMenu.widthAnchor.constraint(equalToConstant: 92).isActive = true
+        rateReadout.widthAnchor.constraint(equalToConstant: 14).isActive = true
+        ratchetReadout.widthAnchor.constraint(equalToConstant: 14).isActive = true
+
+        let arpGroup = captioned("Arp", hRow([arpToggle, shapeMenu, rateStepper, rateReadout], 6),
+                                 dim: !isPitched)
+        let pwmGroup = captioned("PWM", pwmKnob, dim: !isPitched)
+        let vibGroup = captioned("Vib", vibKnob, dim: !isPitched)
+        let ratchetGroup = captioned("Ratchet", hRow([ratchetStepper, ratchetReadout], 5))
+
+        let controls = NSStackView(views: [arpGroup, pwmGroup, vibGroup, ratchetGroup])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.distribution = .equalSpacing
+        controls.translatesAutoresizingMaskIntoConstraints = false
+
+        row.addSubview(header)
+        row.addSubview(controls)
         NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: 38),
+            header.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
+            header.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+            dot.widthAnchor.constraint(equalToConstant: 10),
+            dot.heightAnchor.constraint(equalToConstant: 10),
 
-            dot.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xLabel),
-            dot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            dot.widthAnchor.constraint(equalToConstant: 8),
-            dot.heightAnchor.constraint(equalToConstant: 8),
-            label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 6),
-            label.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-
-            arpToggle.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xArpToggle),
-            arpToggle.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-
-            shapeMenu.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xArpShape),
-            shapeMenu.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            shapeMenu.widthAnchor.constraint(equalToConstant: 84),
-
-            rateStepper.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xArpRate),
-            rateStepper.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            rateReadout.leadingAnchor.constraint(equalTo: rateStepper.trailingAnchor, constant: 5),
-            rateReadout.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            rateReadout.widthAnchor.constraint(equalToConstant: 14),
-
-            pwmCell.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xPWM),
-            pwmCell.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-
-            vibCell.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xVib),
-            vibCell.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-
-            ratchetStepper.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: xRatchet),
-            ratchetStepper.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            ratchetReadout.leadingAnchor.constraint(equalTo: ratchetStepper.trailingAnchor, constant: 5),
-            ratchetReadout.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            ratchetReadout.widthAnchor.constraint(equalToConstant: 14),
-            ratchetStepper.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
+            controls.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
+            controls.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
+            controls.topAnchor.constraint(greaterThanOrEqualTo: header.bottomAnchor, constant: 4),
+            controls.centerYAnchor.constraint(equalTo: row.centerYAnchor, constant: 12),
+            controls.bottomAnchor.constraint(lessThanOrEqualTo: row.bottomAnchor, constant: -8),
         ])
         return row
     }
 
-    // ChipKnob is a fixed 40×40; centre it in a 40pt-wide cell so neighbouring columns
-    // get breathing room and the knob's centre aligns to its column x-position. The cell's
-    // height is left free so the knob can use the full ~38pt row without stretching it.
-    private func wrapKnob(_ knob: ChipKnob) -> NSView {
-        let cell = NSView()
-        cell.translatesAutoresizingMaskIntoConstraints = false
-        knob.translatesAutoresizingMaskIntoConstraints = false
-        cell.addSubview(knob)
-        NSLayoutConstraint.activate([
-            cell.widthAnchor.constraint(equalToConstant: 40),
-            cell.heightAnchor.constraint(equalToConstant: 36),
-            knob.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-            knob.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-        ])
-        return cell
-    }
-
     private func caption(_ t: String) -> NSTextField {
         let cap = NSTextField(labelWithString: theme.cased(t))
-        cap.font = .monospacedSystemFont(ofSize: 8, weight: .medium)
+        cap.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
         cap.textColor = theme.textMuted
+        cap.alignment = .center
         cap.translatesAutoresizingMaskIntoConstraints = false
         cap.setAccessibilityElement(false)
         return cap

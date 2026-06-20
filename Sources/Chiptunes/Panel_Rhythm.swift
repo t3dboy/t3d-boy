@@ -34,126 +34,83 @@ final class RhythmPanel: NSView {
     // MARK: - Build
 
     private func build() {
-        // Column header row of tiny captions, aligned over the lane columns.
-        let hLen = caption("Len"), hDir = caption("Dir"), hProb = caption("Prob"), hEuclid = caption("Euclid")
+        // 2×2 grid: one card per channel, so each gets a roomy quarter.
+        let cards = (0 ..< 4).map { channelCard(lane: $0, voice: ChipVoice(rawValue: $0)!) }
+        let top = quarterRow([cards[0], cards[1]])
+        let bottom = quarterRow([cards[2], cards[3]])
+        let grid = NSStackView(views: [top, bottom])
+        grid.orientation = .vertical
+        grid.distribution = .fillEqually
+        grid.spacing = 10
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(grid)
 
-        // Mutate — evolve the whole pattern (top-right).
-        let mutate = CapsuleButton(title: "Mutate", style: .neutral, fontSize: 13, height: 30)
+        // Mutate — evolve the whole pattern — overlaid in the top-right corner (clear of the
+        // top-right card's header, which sits on the left).
+        let mutate = CapsuleButton(title: "Mutate", style: .neutral, fontSize: 12, height: 26)
         mutate.translatesAutoresizingMaskIntoConstraints = false
         mutate.onClick = { [weak self] in
             guard let self else { return }
             self.engine.mutate()
             self.onChange()
         }
-
         addSubview(mutate)
-        for v in [hLen, hDir, hProb, hEuclid] { addSubview(v) }
-
-        // Four lane rows.
-        var rows: [NSView] = []
-        for i in 0 ..< 4 {
-            let voice = ChipVoice(rawValue: i)!
-            let row = makeLaneRow(lane: i, voice: voice)
-            addSubview(row)
-            rows.append(row)
-        }
-
-        // --- Column x-anchors (shared by header captions + each row) ---
-        // Layout (left→right): [tag] [Len] [Dir] [Prob] [Euclid]
-        // Generous, consistent insets so the panel breathes in the taller (210pt) host.
-        let inset: CGFloat = 16
 
         NSLayoutConstraint.activate([
-            mutate.topAnchor.constraint(equalTo: topAnchor, constant: inset),
-            mutate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-            mutate.widthAnchor.constraint(equalToConstant: 120),
+            grid.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            grid.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            grid.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            grid.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
+
+            mutate.topAnchor.constraint(equalTo: topAnchor, constant: 6),
+            mutate.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -22),
+            mutate.widthAnchor.constraint(equalToConstant: 100),
         ])
-
-        // Header captions sit on a single row above lane 0 (gap ~6pt above row 1).
-        let firstRow = rows[0]
-        NSLayoutConstraint.activate([
-            hLen.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
-            hLen.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW / 2),
-
-            hDir.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
-            hDir.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW / 2),
-
-            hProb.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
-            hProb.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW + Col.probW / 2),
-
-            hEuclid.bottomAnchor.constraint(equalTo: firstRow.topAnchor, constant: -6),
-            hEuclid.centerXAnchor.constraint(equalTo: leadingAnchor, constant: inset + Col.tagW + Col.lenW + Col.dirW + Col.probW + Col.euclidW / 2),
-        ])
-
-        // Stack the rows. Height budget (210pt host):
-        //   first row top 30 + 4·rowH(40) + 3·gap(5) = 30 + 160 + 15 = 205 → ~5pt bottom margin.
-        //   The header captions live in the 30 - 6 = 24 band, clear of the 16pt top inset.
-        let rowGap: CGFloat = 5
-        var prev: NSView? = nil
-        for row in rows {
-            NSLayoutConstraint.activate([
-                row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset),
-                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset),
-                row.heightAnchor.constraint(equalToConstant: Col.rowH),
-            ])
-            if let p = prev {
-                row.topAnchor.constraint(equalTo: p.bottomAnchor, constant: rowGap).isActive = true
-            } else {
-                // inset(16) + header caption(~8) + gap(6) ≈ 30pt down for the first lane.
-                row.topAnchor.constraint(equalTo: topAnchor, constant: 30).isActive = true
-            }
-            prev = row
-        }
     }
 
-    // Fixed column widths (so headers line up over every row). Wider columns give the
-    // controls room to breathe and keep the lanes vertically aligned.
-    private enum Col {
-        static let tagW: CGFloat = 72
-        static let lenW: CGFloat = 72
-        static let dirW: CGFloat = 150
-        static let probW: CGFloat = 56
-        static let euclidW: CGFloat = 200
-        static let rowH: CGFloat = 40
+    private func quarterRow(_ cards: [NSView]) -> NSStackView {
+        let r = NSStackView(views: cards)
+        r.orientation = .horizontal
+        r.distribution = .fillEqually
+        r.spacing = 12
+        return r
     }
 
-    // MARK: - One lane row
+    // MARK: - One channel card (a "quarter")
 
-    private func makeLaneRow(lane: Int, voice: ChipVoice) -> NSView {
-        let row = NSView()
-        row.translatesAutoresizingMaskIntoConstraints = false
+    private func channelCard(lane: Int, voice: ChipVoice) -> NSView {
+        let accent = voiceColor(voice)
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.cornerRadius = theme.radiusMedium
+        card.layer?.backgroundColor = accent.withAlphaComponent(0.07).cgColor
+        card.layer?.borderWidth = 1
+        card.layer?.borderColor = accent.withAlphaComponent(0.28).cgColor
+        card.translatesAutoresizingMaskIntoConstraints = false
 
-        // [●color + "PUL1"]
+        // Header: dot + channel name (bigger than the old thin rows).
         let dot = NSView()
         dot.wantsLayer = true
-        dot.layer?.cornerRadius = 4
-        dot.layer?.backgroundColor = voiceColor(voice).cgColor
+        dot.layer?.cornerRadius = 5
+        dot.layer?.backgroundColor = accent.cgColor
         dot.translatesAutoresizingMaskIntoConstraints = false
-
-        let label = NSTextField(labelWithString: theme.cased(voice.short))
-        label.font = theme.fontMonoSmall
-        label.textColor = voiceColor(voice)
-        label.setAccessibilityElement(false)
-        label.translatesAutoresizingMaskIntoConstraints = false
+        let name = NSTextField(labelWithString: theme.cased(voice.short))
+        name.font = theme.skinned ? .rounded(14, .semibold) : .systemFont(ofSize: 14, weight: .bold)
+        name.textColor = accent
+        name.setAccessibilityElement(false)
+        let header = NSStackView(views: [dot, name])
+        header.orientation = .horizontal; header.alignment = .centerY; header.spacing = 7
+        header.translatesAutoresizingMaskIntoConstraints = false
 
         // [Len: NSStepper 1…16]
         let lenStepper = NSStepper()
-        lenStepper.controlSize = .small
-        lenStepper.minValue = 1
-        lenStepper.maxValue = 16
-        lenStepper.increment = 1
+        lenStepper.controlSize = .regular
+        lenStepper.minValue = 1; lenStepper.maxValue = 16; lenStepper.increment = 1
         lenStepper.integerValue = engine.length(lane: lane)
         lenStepper.valueWraps = false
         lenStepper.translatesAutoresizingMaskIntoConstraints = false
         lenStepper.setAccessibilityLabel("\(voice.short) length")
-
-        let lenReadout = NSTextField(labelWithString: "\(engine.length(lane: lane))")
-        lenReadout.font = theme.fontMonoSmall
-        lenReadout.textColor = theme.textSecondary
-        lenReadout.alignment = .right
-        lenReadout.setAccessibilityElement(false)
-        lenReadout.translatesAutoresizingMaskIntoConstraints = false
-
+        let lenReadout = readout("\(engine.length(lane: lane))")
         lenStepper.onChange = { [weak self] in
             guard let self else { return }
             let n = lenStepper.integerValue
@@ -162,25 +119,24 @@ final class RhythmPanel: NSView {
             self.onChange()
         }
 
-        // [Dir: small NSSegmentedControl of the 4 StepDirection labels]
+        // [Dir: NSSegmentedControl of the 4 StepDirection labels]
         let dirSeg = NSSegmentedControl(labels: StepDirection.allCases.map { $0.label },
                                         trackingMode: .selectOne, target: nil, action: nil)
-        dirSeg.controlSize = .small
+        dirSeg.controlSize = .regular
         dirSeg.segmentDistribution = .fillEqually
         dirSeg.selectedSegment = engine.direction(lane: lane).rawValue
         dirSeg.translatesAutoresizingMaskIntoConstraints = false
         dirSeg.setAccessibilityLabel("\(voice.short) direction")
         dirSeg.onChange = { [weak self] in
             guard let self else { return }
-            let idx = dirSeg.selectedSegment
-            if let d = StepDirection(rawValue: idx) {
+            if let d = StepDirection(rawValue: dirSeg.selectedSegment) {
                 self.engine.setDirection(d, lane: lane)
                 self.onChange()
             }
         }
 
-        // [Prob: ChipKnob 0…1 → setLaneProbability]
-        let probKnob = ChipKnob(value: 1.0, in: 0 ... 1)
+        // [Prob: ChipKnob 0…1 → setLaneProbability] — bigger knob.
+        let probKnob = ChipKnob(value: 1.0, in: 0 ... 1, diameter: 52)
         probKnob.setAccessibilityLabel("\(voice.short) probability")
         probKnob.onChange = { [weak self] v in
             self?.engine.setLaneProbability(Int((v * 100).rounded()), lane: lane)
@@ -189,84 +145,80 @@ final class RhythmPanel: NSView {
 
         // [Euclid: NSStepper hits 0–16 + Fill button]
         let euclidStepper = NSStepper()
-        euclidStepper.controlSize = .small
-        euclidStepper.minValue = 0
-        euclidStepper.maxValue = 16
-        euclidStepper.increment = 1
+        euclidStepper.controlSize = .regular
+        euclidStepper.minValue = 0; euclidStepper.maxValue = 16; euclidStepper.increment = 1
         euclidStepper.integerValue = 4
         euclidStepper.valueWraps = false
         euclidStepper.translatesAutoresizingMaskIntoConstraints = false
         euclidStepper.setAccessibilityLabel("\(voice.short) Euclidean hits")
-
-        let euclidReadout = NSTextField(labelWithString: "4")
-        euclidReadout.font = theme.fontMonoSmall
-        euclidReadout.textColor = theme.textSecondary
-        euclidReadout.alignment = .right
-        euclidReadout.setAccessibilityElement(false)
-        euclidReadout.translatesAutoresizingMaskIntoConstraints = false
-        euclidStepper.onChange = {
-            euclidReadout.stringValue = "\(euclidStepper.integerValue)"
-        }
-
+        let euclidReadout = readout("4")
+        euclidStepper.onChange = { euclidReadout.stringValue = "\(euclidStepper.integerValue)" }
         let fill = ChipIconButton(symbols: ["circle.grid.cross", "circle.grid.3x3.fill", "circle.grid.3x3"],
                                   label: "\(voice.short) Euclidean fill")
         fill.onClick = { [weak self] in
             guard let self else { return }
             self.engine.euclidean(lane: lane, hits: euclidStepper.integerValue)
-            self.onChange()   // also covered by engine.onPatternChanged, but explicit is fine
+            self.onChange()
         }
 
-        for v in [dot, label, lenStepper, lenReadout, dirSeg, probKnob,
-                  euclidStepper, euclidReadout, fill] {
-            v.translatesAutoresizingMaskIntoConstraints = false
-            row.addSubview(v)
-        }
+        // Captioned control groups, spread across the card.
+        let lenGroup = captioned("Len", hRow([lenReadout, lenStepper], 5))
+        let dirGroup = captioned("Dir", dirSeg)
+        let probGroup = captioned("Prob", probKnob)
+        let euclidGroup = captioned("Euclid", hRow([euclidReadout, euclidStepper, fill], 8))
+        dirSeg.widthAnchor.constraint(greaterThanOrEqualToConstant: 168).isActive = true
 
-        // --- Column layout inside the row ---
-        // Controls centre vertically in the ~40pt lane; columns line up with the headers.
-        // Intra-control gap ~18pt between the column groups; tighter pairs within a column.
-        let cy = row.centerYAnchor
+        let controls = NSStackView(views: [lenGroup, dirGroup, probGroup, euclidGroup])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.distribution = .equalSpacing
+        controls.translatesAutoresizingMaskIntoConstraints = false
+
+        card.addSubview(header)
+        card.addSubview(controls)
         NSLayoutConstraint.activate([
-            // tag: dot + label
-            dot.leadingAnchor.constraint(equalTo: row.leadingAnchor),
-            dot.centerYAnchor.constraint(equalTo: cy),
-            dot.widthAnchor.constraint(equalToConstant: 8),
-            dot.heightAnchor.constraint(equalToConstant: 8),
-            label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 6),
-            label.centerYAnchor.constraint(equalTo: cy),
+            header.topAnchor.constraint(equalTo: card.topAnchor, constant: 8),
+            header.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            dot.widthAnchor.constraint(equalToConstant: 10),
+            dot.heightAnchor.constraint(equalToConstant: 10),
 
-            // Len column: readout + stepper
-            lenReadout.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Col.tagW),
-            lenReadout.centerYAnchor.constraint(equalTo: cy),
-            lenReadout.widthAnchor.constraint(equalToConstant: 20),
-            lenStepper.leadingAnchor.constraint(equalTo: lenReadout.trailingAnchor, constant: 6),
-            lenStepper.centerYAnchor.constraint(equalTo: cy),
-
-            // Dir column (wider segmented control)
-            dirSeg.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: Col.tagW + Col.lenW),
-            dirSeg.centerYAnchor.constraint(equalTo: cy),
-            dirSeg.widthAnchor.constraint(equalToConstant: Col.dirW - 18),
-
-            // Prob column (knob is 40×40; center it in the column)
-            probKnob.centerXAnchor.constraint(equalTo: row.leadingAnchor,
-                                              constant: Col.tagW + Col.lenW + Col.dirW + Col.probW / 2),
-            probKnob.centerYAnchor.constraint(equalTo: cy),
-
-            // Euclid column: readout + stepper + Fill (gap ~18pt before the Fill button)
-            euclidReadout.leadingAnchor.constraint(equalTo: row.leadingAnchor,
-                                                   constant: Col.tagW + Col.lenW + Col.dirW + Col.probW),
-            euclidReadout.centerYAnchor.constraint(equalTo: cy),
-            euclidReadout.widthAnchor.constraint(equalToConstant: 20),
-            euclidStepper.leadingAnchor.constraint(equalTo: euclidReadout.trailingAnchor, constant: 6),
-            euclidStepper.centerYAnchor.constraint(equalTo: cy),
-            fill.leadingAnchor.constraint(equalTo: euclidStepper.trailingAnchor, constant: 18),
-            fill.centerYAnchor.constraint(equalTo: cy),
-            fill.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor),
-
-            row.trailingAnchor.constraint(greaterThanOrEqualTo: fill.trailingAnchor),
+            controls.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 16),
+            controls.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            controls.topAnchor.constraint(greaterThanOrEqualTo: header.bottomAnchor, constant: 4),
+            controls.centerYAnchor.constraint(equalTo: card.centerYAnchor, constant: 12),
+            controls.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -8),
         ])
+        return card
+    }
 
-        return row
+    // MARK: - Small builders
+
+    /// A readout label (mono, right-aligned, fixed width so steppers don't jitter the layout).
+    private func readout(_ s: String) -> NSTextField {
+        let l = NSTextField(labelWithString: s)
+        l.font = theme.fontMonoSmall
+        l.textColor = theme.textSecondary
+        l.alignment = .right
+        l.setAccessibilityElement(false)
+        l.translatesAutoresizingMaskIntoConstraints = false
+        l.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        return l
+    }
+
+    /// A horizontal control group.
+    private func hRow(_ views: [NSView], _ spacing: CGFloat) -> NSStackView {
+        let s = NSStackView(views: views)
+        s.orientation = .horizontal; s.alignment = .centerY; s.spacing = spacing
+        return s
+    }
+
+    /// A control with a caption above it.
+    private func captioned(_ title: String, _ control: NSView) -> NSView {
+        let cap = caption(title)
+        let v = NSStackView(views: [cap, control])
+        v.orientation = .vertical; v.alignment = .centerX; v.spacing = 5
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
     }
 }
 

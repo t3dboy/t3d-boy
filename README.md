@@ -16,9 +16,10 @@ A native macOS Game Boy and Game Boy Color emulator, written from scratch in Swi
   delay, reverb and swing** — plus **per-lane glide**, and perform on a built-in **keyboard**
   (mouse or full QWERTY mapping). Dedicated panels add **generative rhythm** (polymeter,
   probability, Euclidean fills), **GB-authentic synthesis** (arpeggiator, PWM, vibrato,
-  ratchets), a **wavetable editor** and **WAV export**, plus a live **oscilloscope**. And the
-  **Perform** tab is a full **live looper** — record parts into per-channel loop tracks by
-  playing in time, clear the grid underneath while your loops keep going, and layer up.
+  ratchets), a **wavetable editor** and **WAV export**, plus a live **oscilloscope**. Live
+  looping is built into the sequencer rows — each lane has a **REC** button that **banks** its
+  pattern into a loop and clears the grid so you can layer another part on top while the loop
+  keeps playing (the **Perform** tab adds tap-tempo, a stutter pad and a sidechain pump).
   Browse the library and the loop keeps grooving with each game's audio swapped in.
   See **[docs/sound-chip.md](docs/sound-chip.md)** for how it works.
 

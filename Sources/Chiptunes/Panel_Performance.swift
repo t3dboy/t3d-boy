@@ -1,14 +1,14 @@
-// T3d Boy — T3d Tunes "Perform" panel: a live loop station.
+// T3d Boy — T3d Tunes "Perform" panel: the global live-performance controls.
 //
-// Modelled on multi-channel loopers (à la Ed Sheeran's rig): the four Game Boy lanes are four
-// loop tracks sharing one clock (the sequencer). Arm a track (REC) and play the keyboard in
-// time — notes land on the grid quantised to the playhead — then bring tracks in and out with
-// MUTE and redo them with CLEAR. A master tap tempo, a stutter (beat-repeat) pad and the
-// sidechain pump round out the live-performance controls.
+// Live looping itself is now per-track, right on the sequencer rows: each lane's REC button
+// banks its pattern into a loop, clears the grid so you can layer another part on top, and the
+// loop keeps playing. This panel holds the controls that apply across the whole performance —
+// a tap-tempo, a stutter (beat-repeat) pad, the sidechain pump, and a one-press clear that
+// wipes every banked loop at once.
 
 import Cocoa
 
-// MARK: - Loop-station button (own-drawn so it can light up / pulse)
+// MARK: - Performance button (own-drawn so it can light up / pulse)
 
 private final class LoopButton: NSView {
     var onClick: (() -> Void)?
@@ -18,7 +18,7 @@ private final class LoopButton: NSView {
     var tint: NSColor
     var active = false { didSet { needsDisplay = true } }
     var dimmed = false { didSet { needsDisplay = true } }
-    var glow: CGFloat = 0 { didSet { needsDisplay = true } }   // 0…1 pulse when armed
+    var glow: CGFloat = 0 { didSet { needsDisplay = true } }   // 0…1 pulse when active
     private static let font = NSFont.monospacedSystemFont(ofSize: 10, weight: .semibold)
 
     init(title: String, tint: NSColor) {
@@ -54,15 +54,11 @@ final class PerformancePanel: NSView {
     private let engine: ChiptuneEngine
     private let onChange: () -> Void
 
-    private var recButtons: [LoopButton] = []
-    private var muteButtons: [LoopButton] = []
-    private var soundLabels: [NSTextField] = []
     private let bpmLabel = NSTextField(labelWithString: "120 BPM")
 
     private var tapTimes: [Double] = []
     private var stutterTimer: Timer?
     private var refreshTimer: Timer?
-    private var glowPhase: CGFloat = 0
     private var stutterSubdiv = 4   // hits per beat: 2 = 1/8, 4 = 1/16, 8 = 1/32
     private let stutterRateLabel = NSTextField(labelWithString: "1/16")
 
@@ -88,103 +84,87 @@ final class PerformancePanel: NSView {
     }
 
     private func build() {
-        // --- Header: how-to hint + tap tempo ---
-        let hint = caption("Live loop — press Play, arm a track (REC), play it in, then layer up")
+        // --- Header: tap tempo + BPM read-out ---
+        let title = caption("PERFORM", theme.textSecondary)
         bpmLabel.font = theme.fontMonoSmall
         bpmLabel.textColor = theme.textSecondary
         bpmLabel.stringValue = "\(engine.bpm) BPM"
         bpmLabel.translatesAutoresizingMaskIntoConstraints = false
         let tap = LoopButton(title: "TAP", tint: theme.accent)
         tap.onClick = { [weak self] in self?.tapTempo() }
-        size(tap, 60, 24)
-        let header = row([hint, flexSpacer(), tap, bpmLabel], spacing: 8)
+        size(tap, 60, 26)
+        let header = row([title, flexSpacer(), tap, bpmLabel], spacing: 8)
+        size(header, nil, 28)
 
-        // --- Four loop tracks ---
-        var trackRows: [NSView] = []
-        for lane in 0 ..< 4 {
-            let voice = ChipVoice(rawValue: lane)!
-            let dot = NSView(); dot.wantsLayer = true; dot.layer?.cornerRadius = 5
-            dot.layer?.backgroundColor = voiceColor(voice).cgColor
-            dot.translatesAutoresizingMaskIntoConstraints = false
-            size(dot, 10, 10)
+        // --- How live looping works (it lives on the sequencer rows now) ---
+        let how1 = caption("Live loop on the rows: press Play, build a pattern, then hit a row's REC")
+        let how2 = caption("to bank it — the grid clears, the loop keeps playing. Layer up and REC again.")
 
-            let name = NSTextField(labelWithString: voice.short)
-            name.font = theme.fontMonoSmall; name.textColor = voiceColor(voice)
-            name.translatesAutoresizingMaskIntoConstraints = false
-
-            let sound = NSTextField(labelWithString: engine.patch(lane: lane).name)
-            sound.font = theme.fontCaption; sound.textColor = theme.textMuted
-            sound.lineBreakMode = .byTruncatingTail
-            sound.translatesAutoresizingMaskIntoConstraints = false
-            sound.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-            soundLabels.append(sound)
-
-            let rec = LoopButton(title: "REC", tint: .systemRed)
-            rec.onClick = { [weak self] in self?.toggleArm(lane) }
-            size(rec, 62, 26)
-            rec.setAccessibilityLabel("\(voice.short) record arm")
-            recButtons.append(rec)
-
-            let mute = LoopButton(title: "MUTE", tint: theme.warm)
-            mute.onClick = { [weak self] in self?.toggleMute(lane) }
-            size(mute, 62, 26)
-            mute.setAccessibilityLabel("\(voice.short) mute")
-            muteButtons.append(mute)
-
-            let clear = LoopButton(title: "CLEAR", tint: theme.textPrimary)
-            clear.onClick = { [weak self] in self?.clear(lane) }
-            size(clear, 58, 26)
-
-            let head = row([dot, name], spacing: 6)
-            size(head, 58, 26)
-            let r = row([head, sound, flexSpacer(), rec, mute, clear], spacing: 8)
-            size(r, nil, 28)
-            trackRows.append(r)
-        }
-
-        // --- Performance FX: stutter pad + pump ---
+        // --- Stutter (beat-repeat) pad + rate ---
         let stutter = LoopButton(title: "STUTTER", tint: theme.accent)
         stutter.onPress = { [weak self] in self?.startStutter() }
         stutter.onRelease = { [weak self] in self?.stopStutter() }
-        size(stutter, 96, 28)
+        size(stutter, 120, 34)
         let rateStepper = NSStepper()
         rateStepper.minValue = 0; rateStepper.maxValue = 2; rateStepper.increment = 1; rateStepper.integerValue = 1
         rateStepper.valueWraps = false; rateStepper.target = self; rateStepper.action = #selector(stutterRateChanged(_:))
         rateStepper.translatesAutoresizingMaskIntoConstraints = false
         stutterRateLabel.font = theme.fontMonoSmall; stutterRateLabel.textColor = theme.textSecondary
         stutterRateLabel.translatesAutoresizingMaskIntoConstraints = false
+        let stutterGroup = labeledGroup("Stutter", row([stutter, caption("Rate"), stutterRateLabel, rateStepper], spacing: 8))
 
+        // --- Sidechain pump ---
         let pumpSlider = NSSlider(value: engine.pumpDepth, minValue: 0, maxValue: 1,
                                   target: self, action: #selector(pumpChanged(_:)))
         pumpSlider.controlSize = .small
         pumpSlider.translatesAutoresizingMaskIntoConstraints = false
-        size(pumpSlider, 130, 18)
+        size(pumpSlider, 170, 18)
         let pumpStepper = NSStepper()
         pumpStepper.minValue = 0; pumpStepper.maxValue = 3; pumpStepper.increment = 1; pumpStepper.integerValue = 1
         pumpStepper.target = self; pumpStepper.action = #selector(pumpDivChanged(_:))
         pumpStepper.translatesAutoresizingMaskIntoConstraints = false
+        let pumpGroup = labeledGroup("Pump", row([pumpSlider, pumpStepper], spacing: 8))
 
-        let fx = row([stutter, caption("Rate"), stutterRateLabel, rateStepper, flexSpacer(),
-                      caption("Pump"), pumpSlider, pumpStepper], spacing: 8)
-        size(fx, nil, 30)
+        // --- Clear every banked loop in one press (the grid is untouched) ---
+        let clearLoops = LoopButton(title: "CLEAR ALL LOOPS", tint: theme.warm)
+        clearLoops.onClick = { [weak self] in self?.clearAllLoops() }
+        size(clearLoops, 180, 34)
+        let clearGroup = labeledGroup("Loops", clearLoops)
 
-        let rows = [header] + trackRows + [fx]
+        // The three control groups spread evenly across the full width.
+        let controls = NSStackView(views: [stutterGroup, pumpGroup, clearGroup])
+        controls.orientation = .horizontal
+        controls.alignment = .top
+        controls.distribution = .equalSpacing
+        controls.translatesAutoresizingMaskIntoConstraints = false
+
+        let rows = [header, how1, how2, controls]
         let stack = NSStackView(views: rows)
         stack.orientation = .vertical
         stack.alignment = .leading
-        stack.spacing = 5
+        stack.spacing = 10
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 40),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -40),
         ])
-        for v in rows {   // stretch each row to the full width
+        for v in [header, controls] {   // stretch the header + controls row to full width
             v.leadingAnchor.constraint(equalTo: stack.leadingAnchor).isActive = true
             v.trailingAnchor.constraint(equalTo: stack.trailingAnchor).isActive = true
         }
-        updateStates()
+    }
+
+    /// A control group with a tiny caption above it (for the spread-out Perform controls).
+    private func labeledGroup(_ title: String, _ content: NSView) -> NSView {
+        let cap = caption(title)
+        let v = NSStackView(views: [cap, content])
+        v.orientation = .vertical
+        v.alignment = .leading
+        v.spacing = 6
+        v.translatesAutoresizingMaskIntoConstraints = false
+        return v
     }
 
     // MARK: Layout helpers
@@ -205,31 +185,11 @@ final class PerformancePanel: NSView {
         if let h { v.heightAnchor.constraint(equalToConstant: h).isActive = true }
     }
 
-    // MARK: Track actions
+    // MARK: Actions
 
-    private func toggleArm(_ lane: Int) {
-        engine.armedLane = (engine.armedLane == lane) ? nil : lane
-        updateStates()
-    }
-    private func toggleMute(_ lane: Int) {
-        engine.setMuted(!engine.isMuted(lane: lane), lane: lane)
-        updateStates()
-    }
-    private func clear(_ lane: Int) {
-        engine.clearLane(lane)
+    private func clearAllLoops() {
+        for lane in 0 ..< engine.lanes.count { engine.clearLoop(lane) }
         onChange()
-        updateStates()
-    }
-
-    private func updateStates() {
-        for lane in 0 ..< recButtons.count {
-            recButtons[lane].active = (engine.armedLane == lane)
-            let muted = engine.isMuted(lane: lane)
-            muteButtons[lane].active = muted
-            muteButtons[lane].title = muted ? "MUTED" : "MUTE"
-            muteButtons[lane].dimmed = !engine.hasContent(lane: lane)
-            soundLabels[lane].stringValue = engine.patch(lane: lane).name
-        }
     }
 
     // MARK: Tap tempo
@@ -275,16 +235,11 @@ final class PerformancePanel: NSView {
         engine.pumpDivision = [1, 2, 4, 8][max(0, min(3, s.integerValue))]
     }
 
-    // MARK: Live refresh (armed-track pulse + state sync)
+    // MARK: Live refresh (keep the BPM read-out in sync with tap/elsewhere)
 
     private func startRefresh() {
-        let t = Timer(timeInterval: 1.0 / 12.0, repeats: true) { [weak self] _ in
+        let t = Timer(timeInterval: 1.0 / 8.0, repeats: true) { [weak self] _ in
             guard let self, self.window != nil, !self.isHidden else { return }
-            self.glowPhase += 0.5
-            let g = (sin(self.glowPhase) + 1) / 2
-            for (lane, rec) in self.recButtons.enumerated() where self.engine.armedLane == lane {
-                rec.glow = g
-            }
             self.bpmLabel.stringValue = "\(self.engine.bpm) BPM"
         }
         RunLoop.main.add(t, forMode: .common)

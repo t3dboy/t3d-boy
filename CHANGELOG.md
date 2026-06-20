@@ -6,16 +6,18 @@ All notable changes to T3d Boy. This project uses [semantic versioning](https://
 
 A big T3d Tunes expansion — generative sequencing, GB-authentic synthesis, and a live looper.
 
+![T3d Tunes — the looping chiptune instrument](https://raw.githubusercontent.com/t3dboy/t3d-boy/main/tools/screenshot-tunes.png)
+
 ### Added
-- **Live looping (the Perform panel).** The four channels double as four **loop tracks**
-  sharing the clock. Arm a track (**REC**) and play the keyboard in time — your notes record
-  onto a loop layer (shown as dots on the grid) and loop. **MUTE** brings tracks in/out;
-  a track's **CLEAR** wipes just that loop. The loop layer is **independent of the step grid**:
-  the main **Clear** now wipes only the grid and keeps playing, so recorded loops carry on
-  while you build something new underneath. Also: **Tap** tempo, a hold-to-roll **Stutter**
-  pad, and a tempo-synced **Pump** (sidechain duck).
-- **Feature-panel tabs** below the keyboard, with a **persistent oscilloscope** of the live
-  output shown alongside every tab:
+- **Live looping, per-row.** Every sequencer lane has its own **REC** button: it **banks** the
+  lane's current grid pattern into a loop and clears the grid, while the loop keeps playing
+  (banked steps show as **dots**). Bank again to **stack layers** — steps banked twice get two
+  dots. **⌥-click / right-click REC** clears that lane's loop. The banked loop is
+  **independent of the step grid**: the main **Clear** now wipes only the grid and keeps
+  playing, so loops carry on while you build something new underneath. The **Perform** tab adds
+  global controls — **Tap** tempo, a hold-to-roll **Stutter** pad, a tempo-synced **Pump**
+  (sidechain duck), and **Clear All Loops**.
+- **Feature-panel tabs** below the keyboard, spread the full width of the window:
   - **Rhythm** — per-lane **Length** (polymeter), playback **Direction** (forward / reverse /
     ping-pong / random), step **Probability**, **Euclidean** fill, and a **Mutate** button.
   - **Timbre** — per-lane **Arpeggiator** (chord shapes on one mono channel), **PWM** (pulse
@@ -24,13 +26,18 @@ A big T3d Tunes expansion — generative sequencing, GB-authentic synthesis, and
     presets) and **Export WAV** (records one loop of the live, FX'd output to a file).
   - **ROM** — **Auto-compose** a starter loop from the cartridge's harvested sounds, per-lane
     **Sound-shuffle**, and a two-game **Mashup** that blends a second ROM's sounds in.
-- **Per-step pitch** via the keyboard, and the grid now shows recorded-loop notes as dots.
+
+  Rhythm and Timbre lay their controls out as **four channel cards** — a quarter each for PUL1,
+  PUL2, WAVE and NOIS — so every channel has room for full-size knobs and controls.
+- **A live oscilloscope** in the top-right: opening the drawer reflows the strip above it into
+  the game's box art, its details, and a scope drawing the instrument's output waveform.
+- **Per-step pitch** via the keyboard, and the grid now shows banked-loop layers as dots.
 
 ### Changed
 - Opening T3d Tunes now expands it to **fill the window**, overlaying the library so the
   sequencer gets real room — while the console tabs and ROM list stay visible at the top so
   you can still switch games.
-- The synth panels were given consistent, roomier layouts.
+- The synth panels were given consistent, roomier, full-width layouts.
 
 ## [3.2.0] — 2026-06-19
 

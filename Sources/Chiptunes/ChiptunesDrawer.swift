@@ -17,8 +17,18 @@ final class FlippedView: NSView { override var isFlipped: Bool { true } }
 /// Persistent on the right of the feature-panel area, so it's always visible.
 final class LiveScope: NSView {
     weak var engine: ChiptuneEngine?
+    /// Borderless, black-background variant for the top-right reveal — blends into the dark strip.
+    var chromeless = false
     private var timer: Timer?
     override var isFlipped: Bool { true }
+
+    /// A static chiptune-style waveform for screenshot/demo mode (no live audio to sample).
+    private static let demoWave: [Float] = (0 ..< 240).map { i in
+        let t = Double(i) / 240.0 * 3          // three cycles across the screen
+        let square: Double = sin(2 * .pi * t) > 0 ? 0.62 : -0.62
+        let detail = 0.22 * sin(2 * .pi * t * 4) + 0.1 * sin(2 * .pi * t * 9)
+        return Float(square + detail)
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -39,30 +49,36 @@ final class LiveScope: NSView {
     func stop() { timer?.invalidate(); timer = nil; needsDisplay = true }
 
     override func draw(_ dirtyRect: NSRect) {
-        let frame = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                 xRadius: theme.radiusMedium, yRadius: theme.radiusMedium)
-        theme.surfaceScreen.setFill(); frame.fill()
+        let radius: CGFloat = chromeless ? 0 : theme.radiusMedium
+        let inset: CGFloat = chromeless ? 0 : 0.5
+        let frame = NSBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                                 xRadius: radius, yRadius: radius)
+        (chromeless ? NSColor.black : theme.surfaceScreen).setFill(); frame.fill()
         // centre line
         theme.lineHair.setStroke()
         let mid = NSBezierPath()
         mid.move(to: NSPoint(x: 6, y: bounds.midY)); mid.line(to: NSPoint(x: bounds.maxX - 6, y: bounds.midY))
         mid.lineWidth = 1; mid.stroke()
 
-        if let s = engine?.snapshotScope(), s.count > 1, bounds.width > 1 {
+        // Screenshot/demo mode has no live audio, so draw a synthetic chiptune wave to keep the
+        // scope looking alive; otherwise show the real captured output.
+        let live = engine?.snapshotScope() ?? []
+        let samples: [Float] = DemoMode.isActive ? Self.demoWave : live
+        if samples.count > 1, bounds.width > 1 {
             NSGraphicsContext.current?.saveGraphicsState()
             frame.addClip()
-            let cy = bounds.midY, amp = bounds.height * 0.42, gain: CGFloat = 2.4, n = s.count
+            let cy = bounds.midY, amp = bounds.height * 0.42, gain: CGFloat = 2.4, n = samples.count
             let wave = NSBezierPath()
             wave.lineWidth = 1.5; wave.lineCapStyle = .round; wave.lineJoinStyle = .round
             for i in 0 ..< n {
                 let x = bounds.width * CGFloat(i) / CGFloat(n - 1)
-                let y = cy + max(-1, min(1, CGFloat(s[i]) * gain)) * amp
+                let y = cy + max(-1, min(1, CGFloat(samples[i]) * gain)) * amp
                 if i == 0 { wave.move(to: NSPoint(x: x, y: y)) } else { wave.line(to: NSPoint(x: x, y: y)) }
             }
             theme.accent.setStroke(); wave.stroke()
             NSGraphicsContext.current?.restoreGraphicsState()
         }
-        theme.controlEdge.setStroke(); frame.lineWidth = 1; frame.stroke()
+        if !chromeless { theme.controlEdge.setStroke(); frame.lineWidth = 1; frame.stroke() }
     }
 }
 
@@ -80,7 +96,7 @@ func voiceColor(_ v: ChipVoice) -> NSColor {
 final class ChipStep: NSView {
     var on = false { didSet { needsDisplay = true; if on && !oldValue { pulse() } } }
     var playing = false { didSet { needsDisplay = true } }
-    var looped = false { didSet { needsDisplay = true } }   // a recorded live-loop note sits here
+    var loopLayers = 0 { didSet { if loopLayers != oldValue { needsDisplay = true } } }   // banked live-loop layers (drawn as dots)
     var tint: NSColor = .systemBlue
     var onToggle: (() -> Void)?
     private let pulseLayer = CALayer()
@@ -125,11 +141,19 @@ final class ChipStep: NSView {
         }
         path.lineWidth = 1; path.stroke()
 
-        // Recorded loop note: a centre dot so it shows on the grid distinct from grid steps.
-        if looped {
-            let d: CGFloat = min(6, r.width * 0.45)
-            let dot = NSBezierPath(ovalIn: NSRect(x: r.midX - d / 2, y: r.midY - d / 2, width: d, height: d))
-            (on ? theme.onAccent : tint).setFill(); dot.fill()
+        // Banked loop layers: a row of centre dots (one per bank) so the grid shows what's
+        // been committed to the loop, distinct from the editable grid steps.
+        if loopLayers > 0 {
+            let n = min(loopLayers, 4)
+            let d: CGFloat = min(5, r.width * 0.34)
+            let gap: CGFloat = 1.5
+            let total = CGFloat(n) * d + CGFloat(n - 1) * gap
+            var x = r.midX - total / 2
+            (on ? theme.onAccent : tint).setFill()
+            for _ in 0 ..< n {
+                NSBezierPath(ovalIn: NSRect(x: x, y: r.midY - d / 2, width: d, height: d)).fill()
+                x += d + gap
+            }
         }
     }
 }
@@ -284,14 +308,14 @@ final class ChipKnob: NSView {
         value = min(max(value + delta * (range.upperBound - range.lowerBound), range.lowerBound), range.upperBound)
     }
 
-    init(value: Double, in range: ClosedRange<Double>) {
+    init(value: Double, in range: ClosedRange<Double>, diameter: CGFloat = 40) {
         self.range = range
         self.value = min(max(value, range.lowerBound), range.upperBound)
         super.init(frame: .zero)
         wantsLayer = true
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 40).isActive = true
-        heightAnchor.constraint(equalToConstant: 40).isActive = true
+        widthAnchor.constraint(equalToConstant: diameter).isActive = true
+        heightAnchor.constraint(equalToConstant: diameter).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -473,6 +497,7 @@ final class ChiptunesDrawer: NSView {
 
     private let bar = ChiptunesBar()
     private var laneSteps: [[ChipStep]] = []        // [lane][step]
+    private var laneRecs: [ChipRecButton] = []       // per-lane live-loop REC button
     private var laneMenus: [NSPopUpButton] = []      // per-lane sound picker
     private var laneVoicePatches: [[ChiptunePatch]] = [] // patches offered in each lane's menu
     private let keyboard = ChipKeyboard(low: 48, high: 72)   // C3…C5 (every key gets a QWERTY shortcut)
@@ -494,7 +519,6 @@ final class ChiptunesDrawer: NSView {
     private var featurePanels: [NSView] = []
     private var panelTabs: NSSegmentedControl?
     private weak var contentScroll: NSScrollView?
-    private let liveScope = LiveScope()   // persistent oscilloscope, right of the feature panels
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -518,6 +542,13 @@ final class ChiptunesDrawer: NSView {
 
     @objc private func panelTabChanged(_ sender: NSSegmentedControl) {
         for (i, p) in featurePanels.enumerated() { p.isHidden = (i != sender.selectedSegment) }
+    }
+
+    /// Select a feature panel by index (used by the demo-shot renderer to capture each tab).
+    func showPanel(_ index: Int) {
+        guard let tabs = panelTabs, index >= 0, index < featurePanels.count else { return }
+        tabs.selectedSegment = index
+        for (i, p) in featurePanels.enumerated() { p.isHidden = (i != index) }
     }
 
     // MARK: Build
@@ -654,6 +685,7 @@ final class ChiptunesDrawer: NSView {
                                       target: self, action: #selector(panelTabChanged(_:)))
         tabs.selectedSegment = 0
         tabs.translatesAutoresizingMaskIntoConstraints = false
+        tabs.segmentDistribution = .fillEqually   // even tabs across the full width
         panelTabs = tabs
         let host = NSView()
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -673,18 +705,9 @@ final class ChiptunesDrawer: NSView {
         status.textColor = theme.textFaint
         status.translatesAutoresizingMaskIntoConstraints = false
 
-        // Persistent oscilloscope on the right ~30% of the feature-panel row, with its caption
-        // sitting in the tab row.
-        liveScope.engine = engine
-        liveScope.translatesAutoresizingMaskIntoConstraints = false
-        let scopeCaption = NSTextField(labelWithString: theme.cased("Scope"))
-        scopeCaption.font = theme.fontMonoSmall
-        scopeCaption.textColor = theme.textSecondary
-        scopeCaption.alignment = .center
-        scopeCaption.setAccessibilityElement(false)
-        scopeCaption.translatesAutoresizingMaskIntoConstraints = false
-
-        for v in [transport, grid, kbControls, keyboard, tabs, host, liveScope, scopeCaption, status] { doc.addSubview(v) }
+        // The oscilloscope lives up in the top-right reveal now (owned by the library), so the
+        // feature panels get the full drawer width here.
+        for v in [transport, grid, kbControls, keyboard, tabs, host, status] { doc.addSubview(v) }
         NSLayoutConstraint.activate([
             transport.topAnchor.constraint(equalTo: doc.topAnchor, constant: 14),
             transport.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -692,16 +715,6 @@ final class ChiptunesDrawer: NSView {
             grid.topAnchor.constraint(equalTo: transport.bottomAnchor, constant: 14),
             grid.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
             grid.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
-
-            // Right column: scope spans the panel-host height; its caption sits over the tab row.
-            // Fixed width (not a proportion) so the panels' intrinsic size can't feed back and
-            // blow up the window.
-            liveScope.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
-            liveScope.widthAnchor.constraint(equalToConstant: 300),
-            liveScope.topAnchor.constraint(equalTo: host.topAnchor),
-            liveScope.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-            scopeCaption.centerXAnchor.constraint(equalTo: liveScope.centerXAnchor),
-            scopeCaption.centerYAnchor.constraint(equalTo: tabs.centerYAnchor),
 
             kbControls.topAnchor.constraint(equalTo: grid.bottomAnchor, constant: 14),
             kbControls.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -713,11 +726,12 @@ final class ChiptunesDrawer: NSView {
 
             tabs.topAnchor.constraint(equalTo: keyboard.bottomAnchor, constant: 12),
             tabs.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
+            tabs.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
 
             host.topAnchor.constraint(equalTo: tabs.bottomAnchor, constant: 10),
             host.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
-            host.trailingAnchor.constraint(equalTo: liveScope.leadingAnchor, constant: -14),
-            host.heightAnchor.constraint(equalToConstant: 210),
+            host.trailingAnchor.constraint(equalTo: doc.trailingAnchor, constant: -18),
+            host.heightAnchor.constraint(equalToConstant: 240),
 
             status.topAnchor.constraint(equalTo: host.bottomAnchor, constant: 8),
             status.leadingAnchor.constraint(equalTo: doc.leadingAnchor, constant: 18),
@@ -826,6 +840,13 @@ final class ChiptunesDrawer: NSView {
         head.spacing = 6; head.alignment = .centerY
         head.translatesAutoresizingMaskIntoConstraints = false
 
+        // Per-lane live-loop REC: bank this row's pattern into its loop, then layer more on top.
+        let rec = ChipRecButton()
+        rec.tint = voiceColor(voice)
+        rec.onBank = { [weak self] in self?.engine.bankLane(lane); self?.refreshSteps() }
+        rec.onClear = { [weak self] in self?.engine.clearLoop(lane); self?.refreshSteps() }
+        laneRecs.append(rec)
+
         // 16 step cells, equal width, stretching with the window
         let cellStack = NSStackView()
         cellStack.orientation = .horizontal
@@ -869,7 +890,7 @@ final class ChiptunesDrawer: NSView {
         knob.onChange = { [weak self] v in self?.engine.setRoot(Int(v.rounded()), lane: lane) }
         pitchKnobs.append((knob, Double(engine.root(lane: lane)))) // default root, for Reset
 
-        for v in [head, menu, glideCell, cellStack, knob] {
+        for v in [head, rec, menu, glideCell, cellStack, knob] {
             v.translatesAutoresizingMaskIntoConstraints = false
             row.addSubview(v)
         }
@@ -879,7 +900,10 @@ final class ChiptunesDrawer: NSView {
             head.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             head.widthAnchor.constraint(equalToConstant: 70),
 
-            menu.leadingAnchor.constraint(equalTo: head.trailingAnchor, constant: 8),
+            rec.leadingAnchor.constraint(equalTo: head.trailingAnchor, constant: 6),
+            rec.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+
+            menu.leadingAnchor.constraint(equalTo: rec.trailingAnchor, constant: 8),
             menu.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             menu.widthAnchor.constraint(equalToConstant: 120),
 
@@ -956,12 +980,9 @@ final class ChiptunesDrawer: NSView {
         }
     }
 
-    /// A keyboard note (mouse-clicked key or QWERTY). If a loop track is armed (Perform tab),
-    /// it records into that track quantised to the playhead; otherwise it plays the keyboard sound.
+    /// A keyboard note (mouse-clicked key or QWERTY) — free play through the selected sound.
     private func playNote(_ note: Int) {
-        if engine.armedLane != nil {
-            engine.liveRecord(note)
-        } else if let patch = kbPatch {
+        if let patch = kbPatch {
             engine.playKey(patch, note: note, throughFX: kbUseFX)
         }
     }
@@ -1006,10 +1027,14 @@ final class ChiptunesDrawer: NSView {
 
     private func refreshSteps() {
         for (lane, cells) in laneSteps.enumerated() {
+            var maxLayers = 0
             for (s, cell) in cells.enumerated() {
                 cell.on = engine.isStepOn(lane: lane, step: s)
-                cell.looped = engine.isLoopOn(lane: lane, step: s)
+                let layers = engine.loopLayerCount(lane: lane, step: s)
+                cell.loopLayers = layers
+                maxLayers = max(maxLayers, layers)
             }
+            if laneRecs.indices.contains(lane) { laneRecs[lane].layers = maxLayers }
         }
     }
 
@@ -1024,7 +1049,6 @@ final class ChiptunesDrawer: NSView {
         active = true
         engine.startAudioIfNeeded()
         installKeyMonitor()
-        liveScope.start()
         // Start the drawer scrolled at the top (transport row visible).
         DispatchQueue.main.async { [weak self] in self?.contentScroll?.contentView.scroll(to: .zero) }
         selectedROM = rom               // (active is true, so this kicks off a sample)
@@ -1034,7 +1058,6 @@ final class ChiptunesDrawer: NSView {
     /// Close the drawer: stop everything and cancel any pending sample.
     func suspend() {
         active = false
-        liveScope.stop()
         removeKeyMonitor()
         pendingHarvest?.cancel(); pendingHarvest = nil
         harvestGen += 1 // invalidate any in-flight result
@@ -1112,6 +1135,71 @@ final class ChipMute: NSView {
         let p = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 3, yRadius: 3)
         (on ? theme.textFaint : theme.keyGreen).withAlphaComponent(on ? 0.4 : 1).setFill()
         p.fill()
+    }
+}
+
+// MARK: - Per-lane live-loop record button
+
+/// The per-row REC control. A click **banks** the lane's current grid pattern into its loop
+/// (the grid then clears but the loop keeps playing); banking again stacks another layer, shown
+/// as a small count. ⌥-click or right-click clears the lane's loop.
+final class ChipRecButton: NSView {
+    var onBank: (() -> Void)?
+    var onClear: (() -> Void)?
+    var tint: NSColor = .systemRed
+    var layers = 0 { didSet { if layers != oldValue { needsDisplay = true } } }
+    private var hovered = false { didSet { needsDisplay = true } }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        translatesAutoresizingMaskIntoConstraints = false
+        toolTip = "Record: bank this row's pattern into the loop. Click again to layer. ⌥-click or right-click to clear."
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+        setAccessibilityLabel("Record loop layer for this lane")
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var intrinsicContentSize: NSSize { NSSize(width: 50, height: 24) }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow],
+                                       owner: self, userInfo: nil))
+    }
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+    override func mouseDown(with event: NSEvent) {
+        if event.modifierFlags.contains(.option) { onClear?() } else { onBank?() }
+    }
+    override func rightMouseDown(with event: NSEvent) { onClear?() }
+    override func accessibilityPerformPress() -> Bool { onBank?(); return true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let on = layers > 0
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: theme.radiusMedium, yRadius: theme.radiusMedium)
+        (on ? tint.withAlphaComponent(hovered ? 0.30 : 0.22)
+            : theme.textPrimary.withAlphaComponent(hovered ? 0.10 : 0.05)).setFill()
+        path.fill()
+        (on ? tint.withAlphaComponent(0.8) : theme.lineHair).setStroke()
+        path.lineWidth = 1; path.stroke()
+
+        // Record dot
+        let d: CGFloat = 7
+        let dotRect = NSRect(x: 7, y: bounds.midY - d / 2, width: d, height: d)
+        let dot = NSBezierPath(ovalIn: dotRect)
+        (on ? tint : tint.withAlphaComponent(hovered ? 0.85 : 0.55)).setFill(); dot.fill()
+
+        // Label: "REC" when empty, the layer count once banked.
+        let text = on ? "×\(layers)" : "REC"
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: NSFont.monospacedSystemFont(ofSize: 9, weight: .bold),
+            .foregroundColor: on ? tint : theme.textSecondary,
+        ]
+        let s = NSAttributedString(string: text, attributes: attrs)
+        s.draw(at: NSPoint(x: dotRect.maxX + 4, y: bounds.midY - s.size().height / 2))
     }
 }
 

@@ -200,8 +200,10 @@ leaving the instrument**. Top to bottom, the looper is:
   switch, a **16-step grid**, a **pitch knob**, and a **mute** (the coloured dot). Toggling a
   step schedules that lane's sound to trigger on that step; the sequencer advances 16th-notes.
 - **A playable keyboard** (C3–C5) with its own sound picker.
-- **A tabbed feature area** — five panels (Rhythm, Timbre, Perform, Visual, ROM) on the left,
-  with a **persistent oscilloscope** of the live output always shown on the right.
+- **A tabbed feature area** — five panels (Rhythm, Timbre, Perform, Visual, ROM) spread the
+  full width below the keyboard.
+- **A live oscilloscope** in the top-right (it appears when the drawer opens, alongside the
+  game's box art and details), drawing the instrument's output waveform.
 
 **Pitch.** Pulse/wave lanes are transposed by the pitch knob (note → frequency as above).
 The noise lane has no musical pitch, so its knob nudges the LFSR clock-shift to make the
@@ -235,7 +237,7 @@ A few more controls finish the row:
 ### The keyboard
 
 A **playable two-octave keyboard** (C3–C5) sits above the feature panels — a live soundboard
-to perform over the loop, audition sounds, or **play parts into the live looper** (below):
+to perform over the loop and audition sounds:
 
 - **Pick the sound** from the **Keyboard** dropdown. It lists the *entire* sampled library —
   every channel's captured sounds — each tagged with the channel it came from.
@@ -251,8 +253,9 @@ to perform over the loop, audition sounds, or **play parts into the live looper*
 
 ### The feature panels
 
-Below the keyboard, a tab bar switches the left ~70% between five panels; the **oscilloscope**
-keeps drawing the live output on the right whichever tab you're on.
+Below the keyboard, a tab bar spans the full width and switches between five panels. **Rhythm**
+and **Timbre** lay their controls out as **four channel cards** — one quarter each for PUL1,
+PUL2, WAVE and NOIS — so every channel gets room for full-size knobs and controls.
 
 - **Rhythm** — per-lane generative rhythm tools: **Length** (1–16, so lanes of different
   lengths drift in and out of phase — polymeter), **Direction** (forward / reverse / ping-pong
@@ -264,7 +267,9 @@ keeps drawing the live output on the right whichever tab you're on.
   mono voice" trick), **PWM** (sweeps the pulse duty over the note), **Vibrato** (pitch
   wobble), and **Ratchets** (a step retriggers 1–8 times for rolls). The pitch-less noise lane
   gets ratchets only.
-- **Perform** — a **live loop station** (see the next section).
+- **Perform** — global performance controls (see *Live looping* for the per-row recording):
+  **Tap** tempo, a momentary **Stutter** pad, a **Pump** sidechain, and a **Clear All Loops**
+  button that wipes every banked loop in one press.
 - **Visual** — a draggable **wavetable editor** for the wave channel (draw the 32-sample
   table, or load Sine/Saw/Square presets) and **Export WAV** (records one loop of the live,
   FX'd output to a file).
@@ -275,26 +280,27 @@ keeps drawing the live output on the right whichever tab you're on.
 
 ### Live looping
 
-The **Perform** panel turns the four lanes into four **loop tracks** that share the
-sequencer's clock — so you can build a song the way you would on a looper: lay down one part,
-let it loop, then layer the next.
+Live looping is built right into the sequencer rows. Every lane has its own **REC** button, so
+you build a song the way you would on a looper — lay down one part, bank it, then layer the
+next — lane by lane:
 
-Each track has three buttons:
+- **REC** — **banks** the lane's current grid pattern into a **loop layer**, then clears the
+  editable grid. The banked loop keeps playing on the sequencer's clock, and the steps you
+  banked show on the grid as small **dots**.
+- **REC again** — lay a new pattern on the same lane and bank it on top to **stack another
+  layer**. Steps banked more than once stack their dots (two banks → two dots), and the REC
+  button shows the layer count.
+- **⌥-click / right-click REC** — clears that lane's banked loop (the editable grid is left
+  alone). The Perform tab's **Clear All Loops** wipes every lane's loop at once.
 
-- **REC** — arm the track. While armed, the keyboard plays *into that track*: notes you play
-  are recorded onto a **loop layer**, quantised to the step the playhead is on, so playing in
-  time lands them on the grid and they loop. Recorded notes show on the grid as small dots.
-- **MUTE** — bring the track in or out, live, to arrange sections on the fly.
-- **CLEAR** — wipe that track's recorded loop (and redo it).
+The crucial part: **the banked loop is independent of the editable grid.** The main **Clear**
+wipes only the step grid and *keeps playing*, so your loops carry on looping — bank a part,
+clear the grid underneath it, and build something new on top. (**Stop Sequencer** halts
+everything.)
 
-The crucial part: **the recorded loop layer is independent of the grid pattern.** The main
-**Clear** wipes only the step grid and *keeps playing*, so your recorded loops carry on
-looping — record a part, clear the grid underneath it, and build something new on top.
-(**Stop Sequencer** halts everything; a track's own **CLEAR** wipes just that loop.)
-
-Rounding out the panel: **Tap** tempo (tap a beat to set the BPM), a momentary **Stutter** pad
-(hold to retrigger the current column for rolls/fills, at a chosen rate), and **Pump** — a
-tempo-synced sidechain duck that makes the whole loop breathe.
+The **Perform** tab rounds this out with global controls: **Tap** tempo (tap a beat to set the
+BPM), a momentary **Stutter** pad (hold to retrigger the current column for rolls/fills, at a
+chosen rate), and **Pump** — a tempo-synced sidechain duck that makes the whole loop breathe.
 
 ### Note gating — why notes don't drone
 
@@ -325,14 +331,14 @@ sampled. You can audition the musical character of your whole library without st
    **Swing** for groove. **Dice** rolls a random pattern; **Reset** returns the FX to neutral.
 5. Hit **Play**, and select a different game to hear your pattern in another cartridge's voice.
 
-**Loop a song (live looping, on the Perform tab):**
+**Loop a song (live looping, on the sequencer rows):**
 
-1. Hit **Play Sequencer** to start the clock.
-2. Tap **REC** on a track and play a part on the keyboard in time — it lands on the grid and
-   loops.
-3. Move **REC** to the next track and layer the next part; **MUTE** tracks in and out to
-   build sections.
-4. Need a fresh canvas under your loops? Hit **Clear** — the grid empties but your recorded
+1. Hit **Play Sequencer** to start the clock and lay a pattern on a lane's grid.
+2. Hit that lane's **REC** to bank it — the grid clears but the loop keeps playing (banked
+   steps show as dots).
+3. Lay a new pattern on the same lane and **REC** again to stack a layer; move to other lanes
+   to build the rest of the arrangement.
+4. Need a fresh canvas under your loops? Hit **Clear** — the grid empties but your banked
    loops keep playing. Drop in a **Stutter** fill or some **Pump** for groove.
 
 That's the Game Boy sound chip — four little tone generators and a frame sequencer — turned
