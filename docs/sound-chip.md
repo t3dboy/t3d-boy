@@ -188,20 +188,25 @@ the register recipes are captured, so each sound is regenerated live by the chip
 
 ### The looper
 
-The drawer has four parts: a **transport + FX row** across the top, the four **lanes**, a
-**playable keyboard** along the bottom, and a status line.
+Opening **T3d Tunes** from the bar at the bottom of the library expands it into a full-height
+panel that fills the window. The top of the library — the console tabs, the sort menu and the
+ROM list — stays visible above it, so you can keep browsing and **switch games without
+leaving the instrument**. Top to bottom, the looper is:
 
+- **Transport + FX row.** Play/Stop, a BPM control, **Clear**, and the synth FX knobs
+  (see below).
 - **Four lanes = the four channels.** Each lane has a **dropdown** of the sounds harvested
   for that channel — this is how you reach every captured timbre — plus a per-lane **Glide**
-  switch, a **pitch knob**, a **mute**, and a **16-step grid**. Toggling a step schedules
-  that lane's patch to trigger on that step.
-- **Transport.** Play/Stop, a BPM control, and **Clear** (empties the loop and silences
-  everything). The sequencer advances 16th-notes; on each step boundary it triggers the
-  active steps' patches.
-- **Pitch.** Pulse/wave lanes are transposed by the pitch knob (note → frequency as above).
-  The noise lane has no musical pitch, so its knob nudges the LFSR clock-shift to make the
-  noise brighter or darker. The knobs sweep the conventional way — lowest fully left,
-  highest fully right.
+  switch, a **16-step grid**, a **pitch knob**, and a **mute** (the coloured dot). Toggling a
+  step schedules that lane's sound to trigger on that step; the sequencer advances 16th-notes.
+- **A playable keyboard** (C3–C5) with its own sound picker.
+- **A tabbed feature area** — five panels (Rhythm, Timbre, Perform, Visual, ROM) on the left,
+  with a **persistent oscilloscope** of the live output always shown on the right.
+
+**Pitch.** Pulse/wave lanes are transposed by the pitch knob (note → frequency as above).
+The noise lane has no musical pitch, so its knob nudges the LFSR clock-shift to make the
+noise brighter or darker. The knobs sweep the conventional way — lowest fully left, highest
+fully right.
 
 ### The synth FX and groove
 
@@ -229,8 +234,8 @@ A few more controls finish the row:
 
 ### The keyboard
 
-Along the bottom is a **playable two-octave keyboard** (C3–C5) — a live soundboard to perform
-over the loop, or just to audition sounds:
+A **playable two-octave keyboard** (C3–C5) sits above the feature panels — a live soundboard
+to perform over the loop, audition sounds, or **play parts into the live looper** (below):
 
 - **Pick the sound** from the **Keyboard** dropdown. It lists the *entire* sampled library —
   every channel's captured sounds — each tagged with the channel it came from.
@@ -243,6 +248,53 @@ over the loop, or just to audition sounds:
   **dry**. Off by default, so you hear the raw sampled sound; flip it on to play through your
   dialled-in filter, delay and reverb. (The running loop always honours the FX; this switch
   only changes the keyboard, and only while the sequencer is stopped.)
+
+### The feature panels
+
+Below the keyboard, a tab bar switches the left ~70% between five panels; the **oscilloscope**
+keeps drawing the live output on the right whichever tab you're on.
+
+- **Rhythm** — per-lane generative rhythm tools: **Length** (1–16, so lanes of different
+  lengths drift in and out of phase — polymeter), **Direction** (forward / reverse / ping-pong
+  / random), **Probability** (a % chance each step fires), and **Euclidean** fill (spread N
+  hits evenly across the lane). A **Mutate** button nudges the whole pattern — flips a few
+  steps to evolve it rather than reset it.
+- **Timbre** — per-lane synthesis: an **Arpeggiator** (the lane rips through a chord shape —
+  octave, major/minor triad, 5th, etc. — on one channel, the classic Game Boy "chord on a
+  mono voice" trick), **PWM** (sweeps the pulse duty over the note), **Vibrato** (pitch
+  wobble), and **Ratchets** (a step retriggers 1–8 times for rolls). The pitch-less noise lane
+  gets ratchets only.
+- **Perform** — a **live loop station** (see the next section).
+- **Visual** — a draggable **wavetable editor** for the wave channel (draw the 32-sample
+  table, or load Sine/Saw/Square presets) and **Export WAV** (records one loop of the live,
+  FX'd output to a file).
+- **ROM** — tools tied to the sampled cartridge: **Auto-compose** (builds a starter loop in
+  the game's voice from its harvested sounds), per-lane **Sound-shuffle** (each hit grabs a
+  random sampled patch for that channel), and **Mashup** (sample a *second* game and blend its
+  sounds into the palette).
+
+### Live looping
+
+The **Perform** panel turns the four lanes into four **loop tracks** that share the
+sequencer's clock — so you can build a song the way you would on a looper: lay down one part,
+let it loop, then layer the next.
+
+Each track has three buttons:
+
+- **REC** — arm the track. While armed, the keyboard plays *into that track*: notes you play
+  are recorded onto a **loop layer**, quantised to the step the playhead is on, so playing in
+  time lands them on the grid and they loop. Recorded notes show on the grid as small dots.
+- **MUTE** — bring the track in or out, live, to arrange sections on the fly.
+- **CLEAR** — wipe that track's recorded loop (and redo it).
+
+The crucial part: **the recorded loop layer is independent of the grid pattern.** The main
+**Clear** wipes only the step grid and *keeps playing*, so your recorded loops carry on
+looping — record a part, clear the grid underneath it, and build something new on top.
+(**Stop Sequencer** halts everything; a track's own **CLEAR** wipes just that loop.)
+
+Rounding out the panel: **Tap** tempo (tap a beat to set the BPM), a momentary **Stutter** pad
+(hold to retrigger the current column for rolls/fills, at a chosen rate), and **Pump** — a
+tempo-synced sidechain duck that makes the whole loop breathe.
 
 ### Note gating — why notes don't drone
 
@@ -259,19 +311,29 @@ Because patches are cheap (just register values), changing the selected game whi
 playing **keeps the loop running and swaps in the new game's sounds** as soon as they're
 sampled. You can audition the musical character of your whole library without stopping.
 
-### Putting it together — a quick recipe
+### Putting it together — two quick recipes
 
-1. Open **T3d Tunes** from the bar at the bottom of the library.
-2. Pick a game — its sounds are sampled automatically.
-3. For each lane, choose a sound from its dropdown (Pulse 1 for a lead, Pulse 2 for a bass,
+**Build a beat (step sequencing):**
+
+1. Open **T3d Tunes** and pick a game — its sounds are sampled automatically.
+2. For each lane, choose a sound from its dropdown (Pulse 1 for a lead, Pulse 2 for a bass,
    Wave for a pad/organ, Noise for drums).
-4. Tap steps to build a beat; set each lane's pitch with its knob, and flip on **Glide** for
-   a lane you want to slide.
-5. Dial in the **FX** — Cutoff/Res for filter sweeps, Drive for grit, Delay and Reverb for
-   space — and add **Swing** for groove. **Reset** returns everything to neutral; **Dice**
-   rolls a random pattern.
-6. Hit **Play**. Perform over the top on the **keyboard** (click it or type `QWERTYUIOP…`),
-   and select a different game to hear your pattern in another cartridge's voice.
+3. Tap steps to build a pattern; set each lane's pitch with its knob, flip on **Glide** to
+   slide, and reach for the **Rhythm** and **Timbre** panels for length/probability, arps,
+   ratchets and more.
+4. Dial in the **FX** — Cutoff/Res for filter sweeps, Drive for grit, Delay/Reverb for space,
+   **Swing** for groove. **Dice** rolls a random pattern; **Reset** returns the FX to neutral.
+5. Hit **Play**, and select a different game to hear your pattern in another cartridge's voice.
+
+**Loop a song (live looping, on the Perform tab):**
+
+1. Hit **Play Sequencer** to start the clock.
+2. Tap **REC** on a track and play a part on the keyboard in time — it lands on the grid and
+   loops.
+3. Move **REC** to the next track and layer the next part; **MUTE** tracks in and out to
+   build sections.
+4. Need a fresh canvas under your loops? Hit **Clear** — the grid empties but your recorded
+   loops keep playing. Drop in a **Stutter** fill or some **Pump** for groove.
 
 That's the Game Boy sound chip — four little tone generators and a frame sequencer — turned
-into a sampler-fed loop machine.
+into a sampler-fed loop machine and live looper.

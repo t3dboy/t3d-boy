@@ -2,6 +2,36 @@
 
 All notable changes to T3d Boy. This project uses [semantic versioning](https://semver.org).
 
+## [3.3.0] — 2026-06-20
+
+A big T3d Tunes expansion — generative sequencing, GB-authentic synthesis, and a live looper.
+
+### Added
+- **Live looping (the Perform panel).** The four channels double as four **loop tracks**
+  sharing the clock. Arm a track (**REC**) and play the keyboard in time — your notes record
+  onto a loop layer (shown as dots on the grid) and loop. **MUTE** brings tracks in/out;
+  a track's **CLEAR** wipes just that loop. The loop layer is **independent of the step grid**:
+  the main **Clear** now wipes only the grid and keeps playing, so recorded loops carry on
+  while you build something new underneath. Also: **Tap** tempo, a hold-to-roll **Stutter**
+  pad, and a tempo-synced **Pump** (sidechain duck).
+- **Feature-panel tabs** below the keyboard, with a **persistent oscilloscope** of the live
+  output shown alongside every tab:
+  - **Rhythm** — per-lane **Length** (polymeter), playback **Direction** (forward / reverse /
+    ping-pong / random), step **Probability**, **Euclidean** fill, and a **Mutate** button.
+  - **Timbre** — per-lane **Arpeggiator** (chord shapes on one mono channel), **PWM** (pulse
+    duty sweep), **Vibrato**, and **Ratchets** (per-step retriggers / rolls).
+  - **Visual** — a draggable **wavetable editor** for the wave channel (with Sine/Saw/Square
+    presets) and **Export WAV** (records one loop of the live, FX'd output to a file).
+  - **ROM** — **Auto-compose** a starter loop from the cartridge's harvested sounds, per-lane
+    **Sound-shuffle**, and a two-game **Mashup** that blends a second ROM's sounds in.
+- **Per-step pitch** via the keyboard, and the grid now shows recorded-loop notes as dots.
+
+### Changed
+- Opening T3d Tunes now expands it to **fill the window**, overlaying the library so the
+  sequencer gets real room — while the console tabs and ROM list stay visible at the top so
+  you can still switch games.
+- The synth panels were given consistent, roomier layouts.
+
 ## [3.2.0] — 2026-06-19
 
 ### Added
